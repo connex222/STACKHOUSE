@@ -1,6 +1,6 @@
 # STACKHOUSE SOCIAL
 
-**Current source version: v2.1.1 (Phase 21).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
+**Current source version: v2.2.0 (Phase 22).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
 
 [Play the live game](https://stackhouse-m50w.onrender.com) · [GitHub repository](https://github.com/connex222/STACKHOUSE)
 
@@ -11,11 +11,11 @@
 | Feature | Current scope |
 | --- | --- |
 | Games | Stack Run, Phase Quest, Malice Duel, Contract Club, Crown Circuit, Number Ladder, Shanghai Nights, Tile Royale, Low Glow, Eight Shift |
-| Solo | All ten games with a House Bot |
+| Solo | All ten games with a House Bot; Easy / Standard / Expert difficulty selection |
 | Private online tables for 2–6 players | Eight Shift, Stack Run, Malice Duel, Tile Royale, Phase Quest, Contract Club, Crown Circuit, Shanghai Nights |
 | Two-player online only | Number Ladder and Low Glow |
 | Games Night Mix tournament | Two players; first to three wins |
-| Audio | Opt-in game cues and separately controlled ambience; Sonilo/Mirelo master recordings and sound-bank assets |
+| Audio | Adjustable sampled game cues and separately controlled ambience; audio troubleshooting inside Audio Settings; Sonilo/Mirelo originals preserved |
 | Hosting | Node.js on Render; server owns private game state and validates turns |
 
 ## Play and develop
@@ -42,6 +42,8 @@ npm start
 - All games use original, simplified house rules rather than claiming to reproduce any third-party branded game's official rules. No real-money gambling is included.
 
 ## Documentation contents
+
+- [Phase 22 — House Bot and interface polish](#phase-22)
 
 - [Release acceptance and testing](#release-validation)
 - [Phase 18 — Professional sound design](#phase-18)
@@ -677,3 +679,16 @@ The Phase 21 follow-up is an intentional **house-rule change** (not a promise to
 - **Accessibility**: shared meld buttons are keyboard-operable, identify their owners and types, and are disabled unless the chosen card legally extends them.
 
 **Acceptance:** Independent engine/server tests cover early melds, laying off on other players' groups, invalid move rejection, privacy, fair penalties, the deal turn cap, Crown Circuit card values, and equal-turn Tile Royale conclusions. The physical-device and permanent-storage requirements remain outstanding.
+
+
+<a id="phase-22"></a>
+
+## Phase 22 — House Bot and interface polish (v2.2.0)
+
+- **Contract-game bot difficulty across all four games:** The Easy House Bot prioritises dumping high-penalty cards and mainly takes a face-up discard to complete a contract. Standard looks for a better mission-specific draw and keeps complementary cards. Expert uses a higher-weight estimate of progress toward the current sets, runs and colour collections while preserving high-value wilds. The Shanghai Nights bot's purchase decision also uses the selected difficulty. This is deterministic heuristic AI, not machine learning or a claim of optimal play.
+- **Privacy:** The bot examines its own hand, the public discard and its assigned contract, never other players' unrevealed cards. The multiplayer server still validates every action; bot difficulty only applies to local solo play.
+- **Cleaner header:** The prominent Sound on/off toggle and optional lounge ambience remain accessible. Volume, Test recording, Test speaker and status move into a labelled **Audio settings** disclosure so they no longer crowd the navigation. Audio settings remain available on phone, PC and TV.
+- **Before-play tutorials:** Every home game tile now offers a **How to play** button, opening the same full instructions used during a match. Instructions are not dependent on starting a game.
+- **Validation:** New engine tests cover difficulty selection, non-use of opponent secrets, legal contract turns and presence of the audio and tutorial controls. Existing gameplay regressions are retained. Passing automated tests does **not** replace human difficulty balancing or real-device audio checks.
+
+**Remaining release issues:** durable multiplayer storage, physical-phone testing, native zoom and assistive-technology acceptance. Do not treat these as complete.

@@ -276,47 +276,102 @@ export function nextContractRound(input) {
   state.log.unshift(`Round ${state.round} started.`);
   return {state:dealRound(state)};
 }
-export function runContractBot(input) {
-  let state=clone(input);
-  // In the local Shanghai game, the bot can also make an off-turn discard purchase.
-  if(state.mode==='shanghai-nights'&&state.active===0&&state.buyWindow&&state.roundWinner===null&&state.winner===null){
-    const top=state.discard.at(-1),hand=state.players[1].hand;
-    const attractive=top?.wild||hand.some(card=>!card.wild&&(card.value===top?.value||(card.colour===top?.colour&&Math.abs(card.value-top.value)<=2)));
-    if(attractive&&!state.buyUsed?.[1])return buyShanghaiDiscard(state,1).state??state;
+/** A public, reproducible approximation of distance to the current contract.
+ * Only the House Bot's own cards and the face-up discard are considered. */
+export function contractHandPotential(hand,mission){
+ if(!mission)return 0;
+ const fixed=hand.filter(c=>!c.wild),wild=hand.length-fixed.length;
+ let score=0;
+ for(const [kind,count] of mission.groups){
+  let matched=0;
+  if(kind==='set'){
+   const counts=new Map();for(const c of fixed)counts.set(c.value,(counts.get(c.value)||0)+1);
+   matched=Math.max(0,...counts.values());
+  }else if(kind==='colour'){
+   const counts=new Map();for(const c of fixed)counts.set(c.colour,(counts.get(c.colour)||0)+1);
+   matched=Math.max(0,...counts.values());
+  }else if(kind==='run'){
+   // Fixed ranks in one range count once; duplicate ranks never improve a run.
+   const ranks=new Set(fixed.map(c=>c.value));
+   for(let first=1;first<=14-count;first++){
+    let coverage=0;for(let rank=first;rank<first+count;rank++)if(ranks.has(rank))coverage++;
+    matched=Math.max(matched,coverage);
+   }
   }
-  if(state.active!==1 || state.roundWinner!==null || state.winner!==null) return state;
+  const progress=Math.min(count,matched+wild);
+  // Completing the final card of a group is more valuable than gathering a lone one.
+  score+=10*count*(progress/count)**3;
+ }
+ // The same wild may contribute to several estimates above; this is a ranking,
+ // not a claim that a compound contract is complete.
+ return score;
+}
+export function chooseContractBotDiscard(hand,mission,mode,level='standard'){
+ if(!Array.isArray(hand)||!hand.length)return -1;
+ if(level==='easy'){
+  // Beginner bot deliberately sheds the highest penalty first, with stable ties.
+  return hand.reduce((best,c,i)=>contractCardPenalty(c,mode)>contractCardPenalty(hand[best],mode)?i:best,0);
+ }
+ let best=0,highest=-Infinity;
+ for(let i=0;i<hand.length;i++){
+  const remaining=hand.filter((_,j)=>i!==j);
+  const potential=contractHandPotential(remaining,mission);
+  const penalty=contractCardPenalty(hand[i],mode);
+  const unplayedWild=hand[i].wild;
+  const preserved=remaining.filter(c=>!c.wild);
+  const related=preserved.reduce((sum,c)=>sum+(c.value===hand[i].value?2:0)+(c.colour===hand[i].colour?0.3:0),0);
+  const valuation=(level==='expert'?potential*3.5:potential*1.8)+penalty*.6-(unplayedWild?30:0)-related;
+  if(valuation>highest+1e-8){highest=valuation;best=i;}
+ }
+ return best;
+}
+export function chooseContractBotDraw(hand,top,mission,level='standard'){
+ if(!top)return 'deck';
+ if(findContract([...hand,top],mission))return 'discard';
+ if(level==='easy')return 'deck';
+ const value=contractHandPotential(hand,mission);
+ const improved=contractHandPotential([...hand,top],mission)-value;
+ return improved>=(level==='expert'?3:9)?'discard':'deck';
+}
+export function runContractBot(input,level='standard') {
+ let state=clone(input);
+ if(!['easy','standard','expert'].includes(level))level='standard';
+ // A buying opportunity belongs to the waiting bot and does not advance a turn.
+ if(state.mode==='shanghai-nights'&&state.active===0&&state.buyWindow&&state.roundWinner===null&&state.winner===null){
+  const top=state.discard.at(-1),hand=state.players[1].hand;
   const mission=currentMission(state,1);
-  const top=state.discard.at(-1);
-  const possibleWithDiscard=top && findContract([...state.players[1].hand,top],mission);
-  let result=drawContractCard(state,possibleWithDiscard?'discard':'deck');
-  if(result.error) return state;
-  state=result.state;
+  const gain=top?contractHandPotential([...hand,top],mission)-contractHandPotential(hand,mission):0;
+  const naturallyRelated=top&&!top.wild&&hand.some(c=>!c.wild&&(c.value===top.value||(c.colour===top.colour&&Math.abs(c.value-top.value)<=2)));
+  const attractive=top&&(findContract([...hand,top],mission)||(level==='expert'?gain>=13:level==='standard'?gain>=24||naturallyRelated:false));
+  if(attractive&&!state.buyUsed?.[1])return buyShanghaiDiscard(state,1).state??state;
+ }
+ if(state.active!==1 || state.roundWinner!==null || state.winner!==null)return state;
+ const player=state.players[1],mission=currentMission(state,1),top=state.discard.at(-1);
+ const source=player.laidDown&&state.mode==='contract-club'?'deck':chooseContractBotDraw(player.hand,top,mission,level);
+ let result=drawContractCard(state,source);
+ if(result.error && source==='deck')result=drawContractCard(state,'discard');
+ if(result.error)return state;
+ state=result.state;
+ if(!state.players[1].laidDown){
   result=layContract(state);
   if(!result.error){
-    state=result.state;
-    if(state.mode!=='contract-club'||state.roundWinner!==null)return state;
+   state=result.state;
+   if(state.mode!=='contract-club'||state.roundWinner!==null)return state;
   }
-  if(state.mode==='contract-club'&&state.players[1].laidDown){
-    for(let limit=0;limit<20&&state.players[1].hand.length&&state.roundWinner===null;limit++){
-      let moved=false;
-      for(let i=0;i<state.players[1].hand.length&&!moved;i++)for(let m=0;m<state.melds.length&&!moved;m++){
-        if(canLayOffContract(state.players[1].hand[i],state.melds[m])){
-          const step=layOffContract(state,i,m);if(!step.error){state=step.state;moved=true;}
-        }
-      }
-      if(!moved)break;
+ }
+ if(state.mode==='contract-club'&&state.players[1].laidDown){
+  for(let limit=0;limit<20&&state.players[1].hand.length&&state.roundWinner===null;limit++){
+   let moved=false;
+   for(let i=0;i<state.players[1].hand.length&&!moved;i++)for(let m=0;m<state.melds.length&&!moved;m++){
+    if(canLayOffContract(state.players[1].hand[i],state.melds[m])){
+     const step=layOffContract(state,i,m);if(!step.error){state=step.state;moved=true;}
     }
-    if(state.roundWinner!==null)return state;
+   }
+   if(!moved)break;
   }
-  const hand=state.players[1].hand;
-  // Prefer preserving wilds, pairs, and close runs. Ties are deterministic.
-  const scores=hand.map(c=> {
-    if(c.wild)return 10000;
-    const near=hand.filter(x=>!x.wild && x!==c && Math.abs(x.value-c.value)<=2).length;
-    const same=hand.filter(x=>!x.wild && x!==c && x.value===c.value).length;
-    const colour=hand.filter(x=>!x.wild && x!==c && x.colour===c.colour).length;
-    return same*6+near*2+colour+(12-c.value)*0.1;
-  });
-  const worst=scores.indexOf(Math.min(...scores));
-  return discardContractCard(state,worst).state;
+  if(state.roundWinner!==null)return state;
+ }
+ const hand=state.players[1].hand;
+ const index=chooseContractBotDiscard(hand,state.players[1].laidDown?null:mission,state.mode,level);
+ return index<0?state:(discardContractCard(state,index).state??state);
 }

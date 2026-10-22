@@ -34,7 +34,7 @@ const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
 const storedSoundVolume=Number(localStorage.getItem('stackhouse.soundVolume') ?? 85);
 const initialSoundVolume=Number.isFinite(storedSoundVolume)?Math.max(0,Math.min(100,storedSoundVolume)):85;
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,roomMatchLength:'full',soloContractLength:'full',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')!=='false',soundVolume:initialSoundVolume,soundStatus:'Press Test to check audio.',soundTestPending:false,ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
+  soundOn:localStorage.getItem('stackhouse.sound')!=='false',soundVolume:initialSoundVolume,soundStatus:'Press Test to check audio.',soundTestPending:false,audioSettingsOpen:false,ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
 function savedSolo(){try{return decodeSoloSave(localStorage.getItem(SOLO_SAVE_KEY));}catch{return null;}}
@@ -208,10 +208,15 @@ function header() {
     <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Games Night Mix'}</span>
       <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
       <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
-      <button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a recorded sample">${icon('play',14)} Test</button>
-      <button data-action="test-tone" class="sound-test-btn sound-tone-btn" aria-label="Play diagnostic tone" title="Check your device with a generated test tone">Tone</button>
-      <label class="sound-volume-control" for="sound-volume">Volume <input id="sound-volume" aria-label="Game sound volume" type="range" min="0" max="100" step="5" value="${ui.soundVolume}"></label>
-      <output id="sound-status" class="sound-status" role="status" aria-live="polite">${escapeHtml(ui.soundStatus)}</output>
+      <details class="audio-settings" id="audio-settings" ${ui.audioSettingsOpen?'open':''}><summary aria-label="Audio settings">${icon('sound',18)} <span>Audio settings</span></summary>
+        <div class="audio-settings-panel" aria-label="Audio controls">
+          <label class="sound-volume-control" for="sound-volume">Effects volume <input id="sound-volume" aria-label="Game sound volume" type="range" min="0" max="100" step="5" value="${ui.soundVolume}"></label>
+          <div class="audio-settings-tests"><button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a recorded sample">${icon('play',14)} Test recording</button>
+          <button data-action="test-tone" class="sound-test-btn sound-tone-btn" aria-label="Play diagnostic tone" title="Check your device with a generated test tone">Test speaker</button></div>
+          <output id="sound-status" class="sound-status" role="status" aria-live="polite">${escapeHtml(ui.soundStatus)}</output>
+          <p class="audio-help">On phones, use your device media volume. Sound is optional and never affects the game.</p>
+        </div>
+      </details>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
     </nav></header>`;
 }
@@ -226,11 +231,11 @@ function homeScreen() {
      <div class="hero-highlights"><div><b>10</b><small>PLAYABLE TABLES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>${soloSummary.wins}</b><small>SOLO WINS ON THIS DEVICE</small></div></div>
    </div>
  </section>
- <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Selectable difficulty for Stack Run, Malice Duel, Number Ladder, Eight Shift, Tile Royale and Low Glow. Contract games retain their standard bot.</p></section>
+ <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Easy, Standard and Expert are available in all ten solo games. Expert contract bots prioritise completing missions and avoiding costly discards.</p></section>
  <section class="bot-level-section" aria-label="Contract match pace"><label for="solo-contract-length">Contract game match length</label><select class="room-input bot-level-select" id="solo-contract-length"><option value="full">Full journey · all contracts</option><option value="quick">Quick Match · 2 deals per player</option></select><p>Quick Match ranks players by contracts completed, then fewest penalty points. Applies to the four contract games only.</p></section><section id="games" class="game-collection"><div class="section-heading"><div><div class="eyebrow">THE GAME COLLECTION</div><h2>Pick your next obsession.</h2><p>Easy to learn. Hard to put down. Each table has its own rules.</p></div><span class="section-pill">WAVES 1–3 · TEN GAMES</span></div>
  <div class="game-grid">${games.map((g,i)=>`<article class="game-tile art-${g.art}"><div class="tile-art"><span class="art-icon" aria-hidden="true">${g.icon}</span><span class="art-sequence" aria-hidden="true">${i===0?'1  2  3  4':i===1?'3 + 3 → 6':i===2?'♠ ♥ ♦ ♣':i===3?'7  8  9':i===4?'3 ★ 4 ★ 5':i===5?'10 → 40 → 60':i===6?'3 + 4 → 7':i===7?'4 4 4':i===8?'−2 0 3':'♥ 8 ♠'}</span></div>
  <div class="tile-body"><span class="tile-type">${escapeHtml(g.category)}</span><h3>${g.title}</h3><p>${g.description}</p><div class="tile-tags"><span>${g.tag}</span>${soloRecords.games[g.id]?.wins?`<span class="tile-trophy">★ ${soloRecords.games[g.id].wins} solo ${soloRecords.games[g.id].wins===1?'win':'wins'}</span>`:''}</div>
- <div class="tile-buttons"><button class="tile-play" data-action="start" data-mode="${g.id}">Play the bot <span>${icon('arrow')}</span></button><button class="tile-play tile-online" data-action="room-open" data-mode="${g.id}">Private table ${icon('people',16)}</button></div></div></article>`).join('')}</div>
+ <div class="tile-buttons"><button class="tile-play" data-action="start" data-mode="${g.id}">Play the bot <span>${icon('arrow')}</span></button><button class="tile-play tile-online" data-action="room-open" data-mode="${g.id}">Private table ${icon('people',16)}</button><button class="tile-rules" data-action="rules" data-mode="${g.id}" aria-label="How to play ${g.title}">${icon('info',15)} How to play</button></div></div></article>`).join('')}</div>
  </section>
  <section class="house-banner"><div><span class="eyebrow">YOUR PEOPLE. YOUR TABLE.</span><h2>Sixteen personalities.<br>One winning look.</h2><p>Pick your player portrait before your first deal. Your choice carries across every table.</p><button class="btn btn-primary" data-action="avatars">Explore the avatars ${icon('arrow')}</button></div><div class="banner-avatars">${[0,4,6,10,12,13].map(n=>`<img src="${avatars[n].image}" alt="${avatars[n].name}" loading="eager">`).join('')}</div></section>
  </main>`;
@@ -541,7 +546,7 @@ function render(){
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content</a>${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 21</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 22</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
  if(backdrop)backdrop.inert=Boolean(ui.modal);
@@ -570,14 +575,14 @@ function checkBotTurn(){
  if(isOnline())return;
  if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
  const previous=ui.game;
- ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game,ui.botDifficulty):ui.game.kind==='low'?runLowBot(ui.game,ui.botDifficulty):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game);
+ ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game,ui.botDifficulty):ui.game.kind==='low'?runLowBot(ui.game,ui.botDifficulty):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game,ui.botDifficulty);
  showMoment(readGameBeat(previous,ui.game));
  saveSolo();render();
 }
 function runResult(result,botAfter=false){
  if(result.error){toast(result.error,true);return;}
  const previous=ui.game;ui.game=result.state;ui.selected=null;ui.orderMessage='';
- if(!isOnline()&&ui.game.kind==='contract'&&ui.game.mode==='shanghai-nights'&&ui.game.active===0&&ui.game.buyWindow)ui.game=runContractBot(ui.game);
+ if(!isOnline()&&ui.game.kind==='contract'&&ui.game.mode==='shanghai-nights'&&ui.game.active===0&&ui.game.buyWindow)ui.game=runContractBot(ui.game,ui.botDifficulty);
  const beat=readGameBeat(previous,ui.game);showMoment(beat);
  saveSolo();if(!beat)sound('card');render();
  if(botAfter)checkBotTurn();
@@ -885,7 +890,7 @@ app.addEventListener('click',event=>{
      case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
      case 'avatars':ui.modal='avatars';sound();render();break;
-     case 'rules':ui.modal='rules';sound();render();break;
+     case 'rules':if(control.dataset.mode)ui.mode=control.dataset.mode;ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
      case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn){contextForAudio();ui.soundStatus='Sound enabled. Press Test to check playback.';}else{ui.soundTestPending=false;ui.soundStatus='Sound muted.';}render();break;
      case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}contextForAudio();sampleAudio.resetFailures();ui.soundTestPending=true;ui.soundStatus=ui.soundVolume===0?'Volume is zero. Raise the slider to hear sound.':'Testing sound…';if(ui.soundVolume>0){if(!sampleAudio.play('win',{force:true})){ui.soundTestPending=false;ui.soundStatus=playFallbackSound('win')?'Playing backup tone.':'No audio device detected.';}}render();break;
@@ -988,6 +993,11 @@ app.addEventListener('change',event=>{
  if(event.target?.id==='bot-level' &&allowedBotLevels.includes(event.target.value)){
   ui.botDifficulty=event.target.value;
   try{localStorage.setItem('stackhouse.botDifficulty',ui.botDifficulty);}catch{}
-  toast(`House Bot difficulty: ${ui.botDifficulty}. Available on six tables.`);
+  toast(`House Bot difficulty: ${ui.botDifficulty}. Available on all ten solo tables.`);
  }
 });
+
+// Preserve the accessible audio disclosure when the game redraws the header.
+app.addEventListener('toggle',event=>{
+ if(event.target?.id==='audio-settings')ui.audioSettingsOpen=event.target.open;
+},true);

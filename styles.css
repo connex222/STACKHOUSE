@@ -278,3 +278,20 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
 .club-meld:not(:disabled):hover{background:#23695d}
 .club-meld:disabled{opacity:.72;cursor:not-allowed}
 .club-meld b{font-size:.75rem}.club-meld span{font-size:1.05rem;line-height:1.5;overflow-wrap:anywhere}
+
+/* Phase 22: lightweight accessible audio disclosure, keeping diagnostics off the game header. */
+.audio-settings{position:relative;color:#f2daab}
+.audio-settings>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1px solid rgba(234,190,115,.48);border-radius:11px;background:rgba(244,202,129,.11);font-weight:800;font-size:12px;white-space:nowrap}
+.audio-settings>summary::-webkit-details-marker{display:none}
+.audio-settings>summary:focus-visible,.tile-rules:focus-visible{outline:3px solid #78e8d6;outline-offset:3px}
+.audio-settings>summary::after{content:'⌄';margin-left:3px}
+.audio-settings[open]>summary::after{content:'⌃'}
+.audio-settings-panel{position:fixed;right:clamp(12px,3vw,40px);top:82px;width:min(330px,calc(100vw - 24px));z-index:100;background:#082a2c;border:1px solid #c3a66d;border-radius:14px;box-shadow:0 16px 48px #000b;padding:17px;display:flex;flex-direction:column;gap:15px}
+.audio-settings-panel .sound-volume-control{width:100%;display:flex;justify-content:space-between;font-size:13px}
+.audio-settings-panel .sound-volume-control input{width:140px;max-width:50%}
+.audio-settings-panel .sound-status{text-align:left;order:0;flex-basis:auto;min-height:0}
+.audio-settings-tests{display:flex;gap:8px;flex-wrap:wrap}
+.audio-help{font-size:12px;line-height:1.5;color:#d6e2de;margin:0}
+.tile-rules{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:transparent;color:#e9d19b;border:1px solid rgba(224,189,121,.52);padding:8px 10px;border-radius:9px;font-weight:700;min-height:40px;font-size:12px}
+.tile-rules:hover{background:rgba(248,209,132,.10)}
+@media(max-width:680px){.audio-settings>summary{padding:0 8px;font-size:11px}.audio-settings>summary span{display:none}.audio-settings-panel{top:76px}.audio-settings-panel .sound-status{font-size:12px}}
