@@ -267,3 +267,14 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
 .buy-discard-callout .btn{white-space:normal;min-height:46px;width:100%;text-align:center}
 .buy-discard-callout:focus-within{outline:2px solid #fff1c6;outline-offset:3px}
 @media(max-width:430px){.buy-discard-callout{padding:12px;margin:10px 0}.buy-discard-callout strong{font-size:14px}}
+
+/* Contract Club Phase 21: public shared melds, keyboard-operable extension buttons. */
+.club-melds{margin:1rem 0;padding:1rem;border:1px solid rgba(221,183,96,.35);border-radius:14px;background:rgba(0,47,44,.28)}
+.club-melds>strong{letter-spacing:.09em;font-size:.78rem;color:#ebd6a5}
+.club-melds p{margin:.3rem 0 .75rem;color:#e4e7df;font-size:.88rem}
+.club-meld-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:.55rem}
+.club-meld{display:flex;flex-direction:column;align-items:flex-start;gap:.28rem;min-height:54px;background:rgba(21,76,69,.8);color:#fff;border:1px solid #b09b63;border-radius:10px;padding:.55rem;text-align:left;cursor:pointer}
+.club-meld:not(:disabled):focus-visible{outline:3px solid #f5d17b;outline-offset:3px}
+.club-meld:not(:disabled):hover{background:#23695d}
+.club-meld:disabled{opacity:.72;cursor:not-allowed}
+.club-meld b{font-size:.75rem}.club-meld span{font-size:1.05rem;line-height:1.5;overflow-wrap:anywhere}

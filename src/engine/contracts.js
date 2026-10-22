@@ -48,6 +48,8 @@ export const MISSION_SETS = {
 const COLOURS = ['coral','gold','teal','violet'];
 const clone = state => structuredClone(state);
 const groupName = kind => ({set:'of a kind',run:'card run',colour:'of one colour'})[kind];
+export const crownCardPenalty = card => card.wild ? 25 : card.value >= 11 ? 15 : card.value;
+export const contractCardPenalty = (card, mode) => mode === 'crown-circuit' ? crownCardPenalty(card) : card.wild ? 20 : card.value;
 export function missionDescription(mission) {
   if (!mission) return 'All contracts completed';
   return mission.groups.map(([kind,count])=> `${count} ${groupName(kind)}`).join(' + ');
@@ -106,9 +108,9 @@ export function createContractGame({ mode='phase-quest',seed=42,playerCount=2,ma
   if(!['full','quick'].includes(matchLength)) throw new Error('Choose a full or quick contract match.');
   const state = {
     kind:'contract',mode,seed,round:1,active:0,step:'draw',matchLength,
-    targetRounds:matchLength==='quick'?playerCount*2:null,buyWindow:false,buyUsed:[],
-    players:Array.from({length:playerCount},(_,i)=>({name:i===0?'You':i===1?'House Bot':`Player ${i+1}`,mission:0,score:0,hand:[]})),
-    draw:[],discard:[],laid:[],roundWinner:null,winner:null,
+    targetRounds:matchLength==='quick'?playerCount*2:null,buyWindow:false,buyUsed:[],dealTurns:0,dealTurnLimit:mode==='contract-club'?playerCount*10:null,
+    players:Array.from({length:playerCount},(_,i)=>({name:i===0?'You':i===1?'House Bot':`Player ${i+1}`,mission:0,score:0,hand:[],laidDown:false})),
+    draw:[],discard:[],laid:[],melds:[],roundWinner:null,winner:null,
     log:[`Welcome to ${mode==='phase-quest'?'Phase Quest':mode==='crown-circuit'?'Crown Circuit':mode==='shanghai-nights'?'Shanghai Nights':'Contract Club'}. Complete your contract before the bot.`]
   };
   return dealRound(state);
@@ -116,9 +118,9 @@ export function createContractGame({ mode='phase-quest',seed=42,playerCount=2,ma
 function dealRound(state) {
   state.draw=buildContractDeck((state.seed+Math.imul(state.round,0x9e3779b9))>>>0,state.mode,state.round);
   state.discard=[];
-  state.laid=[];
-  state.buyWindow=false;state.buyUsed=Array(state.players.length).fill(false);
-  for(const player of state.players) player.hand=state.draw.splice(-10);
+  state.laid=[];state.melds=[];
+  state.buyWindow=false;state.buyUsed=Array(state.players.length).fill(false);state.dealTurns=0;
+  for(const player of state.players){player.hand=state.draw.splice(-10);player.laidDown=false;}
   state.discard.push(state.draw.pop());
   state.step='draw';state.roundWinner=null;
   state.active=(state.round-1)%state.players.length;
@@ -171,14 +173,57 @@ export function discardContractCard(input,handIndex) {
   state.discard.push(card);
   state.buyWindow=false;
   state.log.unshift(`${player.name} discarded ${card.wild?'a wild':card.value}.`);
+  if(state.mode==='contract-club'){
+    if(player.laidDown&&!player.hand.length){finishContractClubDeal(state,state.active);return {state};}
+    state.dealTurns=(state.dealTurns??0)+1;
+    if(state.dealTurns>=state.dealTurnLimit){
+      const penalties=state.players.map(p=>p.hand.reduce((sum,c)=>sum+contractCardPenalty(c,state.mode),0));
+      const min=Math.min(...penalties),leaders=penalties.map((n,i)=>n===min?i:null).filter(x=>x!==null);
+      finishContractClubDeal(state,leaders.length===1?leaders[0]:-1,'Closing time');
+      return {state};
+    }
+  }
   state.active=(state.active+1)%state.players.length;
   state.step='draw';
   return {state};
+}
+/** Finish Contract Club only when a player sheds their last card, not merely on laying their contract. */
+function finishContractClubDeal(state,winnerIndex,reason='Went out') {
+  const player=state.players[winnerIndex];
+  const penalties=state.players.map((rival,i)=>{
+    const penalty=rival.hand.reduce((sum,card)=>sum+contractCardPenalty(card,state.mode),0);
+    rival.score+=penalty;
+    return {name:rival.name,penalty};
+  });
+  state.roundWinner=winnerIndex;state.buyWindow=false;
+  state.log.unshift(reason==='Closing time'?`${player?.name??'Nobody'} ${player?'wins the deal on lowest unplayed-card points.':'tied on lowest unplayed-card points.'} Closing time after ten turns each.`:`${player.name} went out!`);
+  state.log.unshift(`${penalties.map(p=>`${p.name}: +${p.penalty}`).join(' · ')} penalty points.`);
+  finishContractMatch(state,winnerIndex);
+}
+function finishContractMatch(state,winningSeat){
+  if(state.matchLength==='quick' && state.round>=state.targetRounds){
+    const highest=Math.max(...state.players.map(p=>p.mission));
+    const contenders=state.players.map((p,i)=>({index:i,mission:p.mission,score:p.score})).filter(p=>p.mission===highest);
+    const lowest=Math.min(...contenders.map(p=>p.score));
+    const leaders=contenders.filter(p=>p.score===lowest);
+    state.winner=leaders.length===1?leaders[0].index:-1;
+    state.log.unshift(state.winner===-1?'Quick Match drawn: tied contracts and penalties.':`${state.players[state.winner].name} wins Quick Match: most contracts, then fewest penalty points.`);
+  }else if(state.mode==='contract-club'){
+    const finished=state.players.map((p,i)=>({i,p})).filter(({p})=>p.mission>=MISSION_SETS[state.mode].length);
+    if(finished.length){
+      finished.sort((a,b)=>a.p.score-b.p.score);
+      state.winner=finished.length>1&&finished[0].p.score===finished[1].p.score?-1:finished[0].i;
+      state.log.unshift(state.winner===-1?'The grand contract ends in a draw.':`${state.players[state.winner].name} won the match!`);
+    }
+  }else if(state.players[winningSeat]?.mission>=MISSION_SETS[state.mode].length){
+    state.winner=winningSeat;state.log.unshift(`${state.players[winningSeat].name} won the match!`);
+  }
 }
 export function layContract(input) {
   const state=clone(input);
   if(state.winner!==null || state.roundWinner!==null || state.step!=='play') return {error:'Draw before laying your contract.'};
   const player=state.players[state.active];
+  if(state.mode==='contract-club'&&player.laidDown)return {error:'You have already laid your contract this deal. Lay off cards instead.'};
   const mission=currentMission(state);
   const selected=findContract(player.hand,mission);
   if(!selected) return {error:'Your hand does not yet contain the required sets or runs.'};
@@ -186,29 +231,42 @@ export function layContract(input) {
   player.hand=player.hand.filter(c=>!ids.has(c.id));
   state.laid.push(...selected.flat());
   player.mission+=1;
-  // Every rival receives the value of their *own* unplayed cards.
-  // Mission progression is individual; only the player who lays advances.
+  if(state.mode==='contract-club'){
+    player.laidDown=true;
+    for(let i=0;i<selected.length;i++)state.melds.push({owner:state.active,kind:mission.groups[i][0],cards:selected[i]});
+    state.log.unshift(`${player.name} laid “${mission.title}” — now shed your remaining cards onto the table.`);
+    if(!player.hand.length)finishContractClubDeal(state,state.active);
+    return {state};
+  }
   const penalties=state.players.flatMap((rival,i)=>{
     if(i===state.active)return [];
-    const penalty=rival.hand.reduce((sum,c)=>sum+(c.wild?20:c.value),0);
+    const penalty=rival.hand.reduce((sum,c)=>sum+contractCardPenalty(c,state.mode),0);
     rival.score+=penalty;
     return [{name:rival.name,penalty}];
   });
   state.roundWinner=state.active;
   state.buyWindow=false;
   state.log.unshift(`${player.name} completed “${mission.title}”! ${penalties.map(p=>`${p.name}: +${p.penalty}`).join(' · ')} penalty points.`);
-  if(state.matchLength==='quick' && state.round>=state.targetRounds){
-    // A capped match makes penalties genuinely matter when contract counts tie.
-    const highest=Math.max(...state.players.map(p=>p.mission));
-    const contenders=state.players.map((p,i)=>({index:i,mission:p.mission,score:p.score})).filter(p=>p.mission===highest);
-    const lowest=Math.min(...contenders.map(p=>p.score));
-    const leaders=contenders.filter(p=>p.score===lowest);
-    state.winner=leaders.length===1?leaders[0].index:-1;
-    state.log.unshift(state.winner===-1?'Quick Match drawn: tied contracts and penalties.':`${state.players[state.winner].name} wins Quick Match: most contracts, then fewest penalty points.`);
-  }else if(player.mission>=MISSION_SETS[state.mode].length){
-    state.winner=state.active;
-    state.log.unshift(`${player.name} won the match!`);
-  }
+  finishContractMatch(state,state.active);
+  return {state};
+}
+/** After laying their own contract, a player may extend ANY public meld, one card at a time. */
+export function canLayOffContract(card,meld) {
+  return Boolean(card&&meld&&Array.isArray(meld.cards)&&meld.cards.length<13&&validGroup([...meld.cards,card],meld.kind,meld.cards.length+1));
+}
+export function layOffContract(input,handIndex,meldIndex){
+  const state=clone(input);
+  if(state.mode!=='contract-club')return {error:'Laying off is only available in Contract Club.'};
+  if(state.winner!==null||state.roundWinner!==null||state.step!=='play')return {error:'Draw a card before laying off.'};
+  const player=state.players[state.active];
+  if(!player.laidDown)return {error:'Lay your own contract before extending a meld.'};
+  if(!Number.isInteger(handIndex)||handIndex<0||handIndex>=player.hand.length)return {error:'Choose a valid card from your hand.'};
+  if(!Number.isInteger(meldIndex)||meldIndex<0||meldIndex>=state.melds.length)return {error:'Choose a valid table meld.'};
+  const card=player.hand[handIndex],meld=state.melds[meldIndex];
+  if(!canLayOffContract(card,meld))return {error:'This card does not extend that set or run.'};
+  player.hand.splice(handIndex,1);meld.cards.push(card);state.laid.push(card);
+  state.log.unshift(`${player.name} laid off a card onto ${state.players[meld.owner].name}’s ${meld.kind}.`);
+  if(!player.hand.length)finishContractClubDeal(state,state.active);
   return {state};
 }
 export function nextContractRound(input) {
@@ -234,7 +292,22 @@ export function runContractBot(input) {
   if(result.error) return state;
   state=result.state;
   result=layContract(state);
-  if(!result.error) return result.state;
+  if(!result.error){
+    state=result.state;
+    if(state.mode!=='contract-club'||state.roundWinner!==null)return state;
+  }
+  if(state.mode==='contract-club'&&state.players[1].laidDown){
+    for(let limit=0;limit<20&&state.players[1].hand.length&&state.roundWinner===null;limit++){
+      let moved=false;
+      for(let i=0;i<state.players[1].hand.length&&!moved;i++)for(let m=0;m<state.melds.length&&!moved;m++){
+        if(canLayOffContract(state.players[1].hand[i],state.melds[m])){
+          const step=layOffContract(state,i,m);if(!step.error){state=step.state;moved=true;}
+        }
+      }
+      if(!moved)break;
+    }
+    if(state.roundWinner!==null)return state;
+  }
   const hand=state.players[1].hand;
   // Prefer preserving wilds, pairs, and close runs. Ties are deterministic.
   const scores=hand.map(c=> {

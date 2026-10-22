@@ -1,6 +1,6 @@
 # STACKHOUSE SOCIAL
 
-**Current source version: v2.0.0 (Phase 20).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
+**Current source version: v2.1.1 (Phase 21).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
 
 [Play the live game](https://stackhouse-m50w.onrender.com) · [GitHub repository](https://github.com/connex222/STACKHOUSE)
 
@@ -643,3 +643,37 @@ If the sound-status line says **Test sound played** but you still hear nothing, 
 - **Verification:** The normaliser includes post-processing measurements and is safe to run repeatedly. Audio regression tests and Chromium smoke tests cover distinct recorded/tone paths and volume changes.
 
 Outstanding: physical phone/TV speaker verification and permanent multiplayer storage.
+
+
+## Phase 21 — Gameplay quality and pacing (v2.1.0)
+
+This phase begins a selective redesign rather than adding titles. Previously saved Full Match rooms and the original ten-game rules remain available.
+
+### Quick Match — four contract titles
+
+Hosts and solo players may choose Full or Quick. Full retains all missions and ends when one player completes the final contract. Quick runs **two deals per seated player** (four deals for two players, twelve for six), ranking by **contracts completed**, then **fewest accumulated penalty points**. A tie on both metrics is a draw. Quick is not used for Games Night Mix, which retains full rules for consistency.
+
+### Shanghai Nights discard buying
+
+A player who deliberately draws from the deck declines the face-up discard and opens a purchase opportunity to the waiting players. A waiting rival may buy it once per deal, taking the discard **and one face-down penalty card**. The active player's turn continues uninterrupted. The window closes when the active player discards or one rival makes the purchase. The server alone validates the buyer's seat, remaining supply, phase and purchase limit; opponent hands remain hidden. In solo play, the House Bot can buy a card that helps its sets or runs.
+
+### Tile Royale — truthful finishing rules and public final scores
+
+The first emptied rack still wins immediately. If the tile pool runs dry and everybody stalls, lowest rack points (20 per wild, face value otherwise) wins; exact ties draw. Six-player playtests with a simple strategy heavily favoured this type of finish, so the home, rules and in-game guidance now state it plainly. **No unverified claims of rebalancing success** are made: altering the core tile economy and enabling table rearrangement require separate comparative playtesting. Full rack totals are revealed to all players only after a points-finish, in each player's own displayed seat order.
+
+### Remaining Phase 21 design work
+
+Contract Club is still a first-to-lay house-rule game, not a fully fledged lay-off rummy. Phase Quest and Crown Circuit use distinct mission sets, Crown's five suits and rotating wild rank; their deeper mechanics have not been redesigned in this initial release. Comprehensive measured human pacing and tile-economy balancing remain future work.
+
+
+## Phase 21 continuation — Contract Club, Crown Circuit and group Tile Royale (v2.1.1)
+
+The Phase 21 follow-up is an intentional **house-rule change** (not a promise to reproduce the rules of any branded rummy/tile game). Existing in-progress matches should finish before a deployment because the new gameplay semantics are different.
+
+- **Contract Club** has its own rummy flow: once a player draws and lays their assigned contract, the game continues. The public table displays their original sets/runs/colour melds; players who have laid may extend any valid shared meld one card at a time. Discard to finish the turn. First to empty their hand wins the deal. Each player may lay only one contract per deal, and everyone who lays progresses. All unplayed cards generate penalty scores at deal end. The server validates every extension and keeps undealt/private cards hidden.
+- **Contract Club closing time**: if nobody goes out after **ten completed turns per player**, compare unplayed-hand points; lowest points wins the deal, exact ties draw. This guarantees that a long deal finishes. Matches still use the existing Full Journey (seven contracts) or Quick Match (two deals per player).
+- **Crown Circuit**: the existing round-rotating wild rank is unchanged. To make retention decisions more distinctive, unplayed court cards (11–13) now score **15 penalty points** and all wilds **25**, instead of treating all cards strictly at face value and all wilds as 20. Phase Quest, Contract Club and Shanghai Nights keep their previous point values.
+- **Tile Royale, five or six players**: simulated 36 seeds at each table size with a simple standard bot showed that merely reducing initial racks from 14 to 12/11/10 did *not* reliably improve rack-clearing and in fact extended matches. We therefore retain the 14-tile racks. Group play is now a clearly labelled **Points Sprint**: each player has exactly eight turns; emptying a rack wins instantly, otherwise the lowest remaining rack points wins, ties draw. Smaller tables retain the previous exhausted-pool endgame.
+- **Accessibility**: shared meld buttons are keyboard-operable, identify their owners and types, and are disabled unless the chosen card legally extends them.
+
+**Acceptance:** Independent engine/server tests cover early melds, laying off on other players' groups, invalid move rejection, privacy, fair penalties, the deal turn cap, Crown Circuit card values, and equal-turn Tile Royale conclusions. The physical-device and permanent-storage requirements remain outstanding.

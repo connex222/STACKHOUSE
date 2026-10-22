@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createSequenceGame, playSequenceCard, discardSequenceCard, passSequenceTurn, canPassSequenceTurn, replenishSequenceHand, canReplenishSequenceHand } from '../engine/sequence.js';
-import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound, buyShanghaiDiscard } from '../engine/contracts.js';
+import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound, buyShanghaiDiscard, layOffContract } from '../engine/contracts.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard } from '../engine/rack.js';
 import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
 import { createLowGame, lowDraw, lowReplace, lowFlip, lowNextRound } from '../engine/lowcard.js';
@@ -73,22 +73,22 @@ export function projectGame(game, seat) {
     stock:copyPile(player.stock,owned),
     hand:owned ? player.hand : Array(player.hand.length).fill(null),
     discards:player.discards.map(p=>copyPile(p,true))
-  }) : ({name:player.name, mission:player.mission,score:player.score,
+  }) : ({name:player.name, mission:player.mission,score:player.score,laidDown:Boolean(player.laidDown),
     hand:owned ? player.hand : Array(player.hand.length).fill(null)});
   const shared = {kind:game.kind,mode:game.mode,active:relative(game.active),
     winner:relative(game.winner),
     roundWinner:relative(game.roundWinner),
     players:order.map(i=>adapt(game.players[i],i===seat)),
     log:game.log.slice(0,12)};
-  if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length},finalRackPoints:game.winner===null?null:game.finalRackPoints?order.map(i=>game.finalRackPoints[i]):null};
+  if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,turnLimit:game.turnLimit??null,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length},finalRackPoints:game.winner===null?null:game.finalRackPoints?order.map(i=>game.finalRackPoints[i]):null};
   if(game.kind==='low')return {...shared,round:game.round,step:game.step,held:game.active===seat?game.held:null,drawnFrom:game.active===seat?game.drawnFrom:null,closingSeat:game.closingSeat===null?null:(game.closingSeat===seat?0:1),draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   if(game.kind==='eights')return {...shared,turn:game.turn,drew:game.drew,activeSuit:game.activeSuit,draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   if(game.kind==='sequence') return {...shared, rules:game.rules,turn:game.turn,builds:game.builds,stalemate:Boolean(game.stalemate),canPass:canPassSequenceTurn(game,seat),canRefill:canReplenishSequenceHand(game,seat)};
   if(game.kind==='rack') return {...shared,step:game.step,turn:game.turn,held:game.active===seat?game.held:null,
     draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  return {...shared,round:game.round,step:game.step,matchLength:game.matchLength??'full',targetRounds:game.targetRounds??null,
+  return {...shared,round:game.round,step:game.step,matchLength:game.matchLength??'full',targetRounds:game.targetRounds??null,dealTurns:game.dealTurns??0,dealTurnLimit:game.dealTurnLimit??null,
     canBuy:game.mode==='shanghai-nights'&&game.buyWindow===true&&game.active!==seat&&!game.buyUsed?.[seat]&&game.roundWinner===null&&game.winner===null,
-    draw:{length:game.draw.length},discard:game.discard,laid:game.laid};
+    draw:{length:game.draw.length},discard:game.discard,laid:game.laid,melds:game.mode==='contract-club'?game.melds??[]:[]};
 }
 
 /** In-process private room registry; optional snapshot file for restart persistence. */
@@ -363,6 +363,9 @@ export class RoomStore {
         case 'contract-lay':
           if(game.kind!=='contract')throw Error('Invalid contract action.');
           outcome=layContract(game);break;
+        case 'contract-layoff':
+          if(game.kind!=='contract'||!restrictedIndex(action.handIndex,100)||!restrictedIndex(action.meldIndex,99))throw Error('Invalid meld extension.');
+          outcome=layOffContract(game,action.handIndex,action.meldIndex);break;
         case 'next-round':outcome=game.kind==='low'?lowNextRound(game):nextContractRound(game);
           if(outcome.state)outcome.state=securelyDeal(outcome.state);break;
         default:throw Error('Unknown game action.');

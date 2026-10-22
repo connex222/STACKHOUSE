@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {RoomStore} from '../src/server/rooms.js';
-import {createContractGame,drawContractCard,discardContractCard,layContract,nextContractRound,MISSION_SETS} from '../src/engine/contracts.js';
+import {createContractGame,drawContractCard,discardContractCard,layContract,nextContractRound,MISSION_SETS,contractCardPenalty} from '../src/engine/contracts.js';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -57,7 +57,7 @@ for(const mode of modes)for(const n of [3,4,6]){
    for(const [kind,count] of mission.groups){for(let j=0;j<count;j++)cards.push({id:`forced${cards.length}`,value:kind==='run'?j+1:kind==='set'?7:2,colour:kind==='colour'?'teal':j%2?'gold':'coral',wild:false});}
    me.hand=cards;
   }
-  const rivals=state.players.slice(1).map(p=>p.hand.reduce((sum,c)=>sum+(c.wild?20:c.value),0));
+  const rivals=state.players.slice(1).map(p=>p.hand.reduce((sum,c)=>sum+contractCardPenalty(c,mode),0));
   const result=layContract(state);
   assert.ok(!result.error,result.error);
   assert.equal(result.state.roundWinner,0);
