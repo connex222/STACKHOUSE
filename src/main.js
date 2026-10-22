@@ -1,6 +1,7 @@
 import { sessionSeed } from './rng.js';
 import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-order.js';
 import {SOLO_SAVE_KEY,encodeSoloSave,decodeSoloSave} from './solo-save.js';
+import {nextMovePrompt,readGameBeat,visibleHandSignature} from './game-feel.js';
 import { createSequenceGame, sequencePileTargets, playSequenceCard, discardSequenceCard, runSequenceBot } from './engine/sequence.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard, runRackBot } from './engine/rack.js';
 import { createContractGame, currentMission, missionDescription, findContract, drawContractCard, discardContractCard, layContract, nextContractRound, runContractBot, MISSION_SETS } from './engine/contracts.js';
@@ -26,7 +27,7 @@ const games = [
 ];
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')==='true',lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[]};
+  soundOn:localStorage.getItem('stackhouse.sound')==='true',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[]};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
 function savedSolo(){try{return decodeSoloSave(localStorage.getItem(SOLO_SAVE_KEY));}catch{return null;}}
@@ -38,7 +39,7 @@ function saveSolo(){
 function resumeSolo(){
  const save=savedSolo();if(!save)return toast('No saved solo match was found.',true);
  stopOnline();ui.mode=save.mode;ui.game=save.game;ui.handOrders=save.handOrders;
- ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.selected=null;ui.modal=null;
+ ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.selected=null;ui.modal=null;ui.moment=null;
  ui.screen='game';ui.lowAction='replace';sound('card');render();
  window.scrollTo({top:0,behavior:'instant'});
 }
@@ -65,26 +66,72 @@ const gameInfo=()=>games.find(g=>g.id===ui.mode)||games[0];
 const escapeHtml=(s)=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const cls=(...names)=>names.filter(Boolean).join(' ');
 let audioContext;
+let ambienceVoices=[];
+let ambienceGain=null;
+function contextForAudio(){
+ const AC=window.AudioContext||window.webkitAudioContext;
+ if(!AC)return null;
+ audioContext ||=new AC();
+ if(audioContext.state==='suspended')audioContext.resume();
+ return audioContext;
+}
+// Soft procedural table sounds: no downloads, no large sound files or autoplay.
 function sound(type='tap') {
-  if(!ui.soundOn)return;
-  try {
-    const AC=window.AudioContext||window.webkitAudioContext;
-    audioContext ||=new AC();
-    if(audioContext.state==='suspended')audioContext.resume();
-    const tones = type==='success'?[523,659,784]:type==='error'?[240,190]:type==='card'?[440,620]:[390];
-    tones.forEach((frequency,index)=>{
-      const oscillator=audioContext.createOscillator();
-      const gain=audioContext.createGain();
-      const t=audioContext.currentTime+index*0.08;
-      oscillator.type=type==='success'?'sine':'triangle';
-      oscillator.frequency.setValueAtTime(frequency,t);
-      gain.gain.setValueAtTime(0.0001,t);
-      gain.gain.exponentialRampToValueAtTime(0.035,t+0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
-      oscillator.connect(gain).connect(audioContext.destination);
-      oscillator.start(t);oscillator.stop(t+0.17);
-    });
-  }catch{ /* Audio is optional; games always function when muted. */ }
+ if(!ui.soundOn)return;
+ try {
+  const ctx=contextForAudio();if(!ctx)return;
+  const notes={tap:[392],select:[523],card:[330,495],deal:[262,392,523],draw:[294,440],
+   sort:[440,554],clear:[523,659,880],round:[440,554,659],success:[523,659,784,1047],
+   win:[392,523,659,784,1047],lose:[294,262,220],error:[220,175]};
+  const frequencies=notes[type]||notes.tap;
+  frequencies.forEach((freq,index)=>{
+   const oscillator=ctx.createOscillator(),gain=ctx.createGain(),t=ctx.currentTime+index*0.075;
+   oscillator.type=['win','success','round','clear'].includes(type)?'sine':'triangle';
+   oscillator.frequency.setValueAtTime(freq,t);
+   if(type==='card'||type==='draw'||type==='deal')oscillator.frequency.exponentialRampToValueAtTime(freq*.91,t+.09);
+   gain.gain.setValueAtTime(.0001,t);
+   gain.gain.exponentialRampToValueAtTime(type==='win'?.038:.025,t+.012);
+   gain.gain.exponentialRampToValueAtTime(.0001,t+.17);
+   oscillator.connect(gain).connect(ctx.destination);oscillator.start(t);oscillator.stop(t+.19);
+  });
+ }catch{/* Mute gracefully when audio devices or browser audio are unavailable. */}
+}
+function syncAmbience(){
+ const playing=ui.ambienceOn&&ui.screen==='game'&&!(typeof document.hidden==='boolean'&&document.hidden);
+ if(!playing){
+  if(ambienceGain&&audioContext){try{ambienceGain.gain.setTargetAtTime(.00001,audioContext.currentTime,.06);}catch{}}
+  ambienceVoices.forEach(voice=>{try{voice.stop(audioContext?.currentTime+.3);}catch{}});
+  ambienceVoices=[];ambienceGain=null;return;
+ }
+ if(ambienceVoices.length)return;
+ try {
+  const ctx=contextForAudio();if(!ctx)return;
+  const gain=ctx.createGain();gain.gain.setValueAtTime(.00001,ctx.currentTime);
+  gain.gain.setTargetAtTime(.005,ctx.currentTime,.55);gain.connect(ctx.destination);
+  ambienceGain=gain;
+  for(const frequency of [130.813,196.0,261.626]) {
+   const voice=ctx.createOscillator();voice.type='sine';voice.frequency.value=frequency;
+   voice.connect(gain);voice.start();ambienceVoices.push(voice);
+  }
+ }catch{ambienceVoices=[];ambienceGain=null;}
+}
+function showMoment(beat) {
+ if(!beat)return;
+ ui.moment=beat;
+ clearTimeout(ui.momentTimer);
+ ui.momentTimer=setTimeout(()=>{ui.moment=null;render();},2600);
+ sound(({win:'win',lose:'lose',round:'round',clear:'clear',play:'card'})[beat.type]||'card');
+}
+function tableGuide(){
+ if(!ui.game)return '';
+ const game=ui.game;
+ const opts={};
+ if(game.kind==='contract'&&game.active===0&&game.step==='play')opts.canLay=Boolean(findContract(game.players[0].hand,currentMission(game,0)));
+ if(game.kind==='tiles'&&ui.selected?.type==='tiles')opts.validTile=Boolean(tileMeld(ui.selected.indices.map(i=>game.players[0].rack[i]).filter(Boolean)));
+ if(game.kind==='eights'&&game.active===0)opts.legalCount=game.players[0].hand.filter(card=>eightCanPlay(card,game)).length;
+ const step=nextMovePrompt(game,ui.selected,opts);if(!step)return '';
+ const glyph=step.tone==='celebrate'?'✦':step.tone==='wait'?'◌':step.tone==='finish'?'★':'➜';
+ return `<section class="next-move-guide tone-${step.tone}" aria-label="Your next move"><span class="next-move-icon" aria-hidden="true">${glyph}</span><div><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.detail)}</p></div></section>`;
 }
 function toast(message,error=false) {
   ui.toast={message,error};
@@ -111,6 +158,7 @@ function header() {
   return `<header class="site-header"><button class="brand" data-action="home" aria-label="Stackhouse Social home">
     <img src="/assets/logo.webp" alt="" width="54" height="54"><span class="brand-word">STACKHOUSE <small>SOCIAL</small></span></button>
     <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Arrange hands'}</span>
+      <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
       <button data-action="toggle-sound" class="icon-button" aria-label="${ui.soundOn?'Mute':'Enable'} game sounds" title="${ui.soundOn?'Mute':'Enable'} sounds">${icon(ui.soundOn?'sound':'mute',20)}</button>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
     </nav></header>`;
@@ -170,7 +218,7 @@ function turnNotice(){
 }
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${tableGuide()}`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();
@@ -205,7 +253,7 @@ function reorderHand(zone,from,to){
  pushOrderUndo(zone);ui.handOrders[zone]=moveHandToken(order,from,to);
  ui.orderMessage=`Moved item ${from+1} to position ${to+1}.`;
  ui.arrangeFrom=null;
- saveSolo();sound('card');render();return true;
+ saveSolo();sound('sort');render();return true;
 }
 function resetArrangement(){ui.handOrders={};ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.orderMessage='';}
 
@@ -337,30 +385,63 @@ function modalContent() {
  <div class="modal-footer"><button class="btn btn-primary" data-action="close">${avatarModal?'Done — take a seat':'Got it'} ${icon('arrow')}</button></div>
  </section></div>`;
 }
+let lastMotionSignature='';
+function capturePieceRects(){
+ const rects=new Map();
+ if(typeof app.querySelectorAll!=='function')return rects;
+ for(const piece of app.querySelectorAll('.hand-piece[data-order-key]')){
+  const r=piece.getBoundingClientRect?.();if(r)rects.set(`${piece.dataset.orderZone}:${piece.dataset.orderKey}`,{left:r.left,top:r.top});
+ }
+ return rects;
+}
+function animateTable(rects,handChanged){
+ if(typeof app.querySelectorAll!=='function'||window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+ let dealt=0;
+ for(const piece of app.querySelectorAll('.hand-piece[data-order-key]')){
+  const key=`${piece.dataset.orderZone}:${piece.dataset.orderKey}`,previous=rects.get(key),r=piece.getBoundingClientRect?.();
+  if(previous&&r&&typeof piece.animate==='function'){
+   const dx=previous.left-r.left,dy=previous.top-r.top;
+   if(Math.abs(dx)+Math.abs(dy)>3&&Math.abs(dx)<1100&&Math.abs(dy)<600){
+    piece.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'translate(0,0)'}],{duration:260,easing:'cubic-bezier(.2,.9,.3,1)'});
+   }
+  }else if(handChanged&&dealt<14){
+   piece.style?.setProperty('--feel-delay',`${Math.min(dealt++,9)*32}ms`);piece.classList.add('feel-dealt');
+  }
+ }
+}
 function render(){
+ const beforeRects=capturePieceRects();
+ const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
+ const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> SOLO SAVE & HAND CONTROLS</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
- ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}`;
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 8</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
+ ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
+ animateTable(beforeRects,handChanged);
+ lastMotionSignature=motionSignature;
+ syncAmbience();
 }
 function start(mode){
  stopOnline();
  const found=games.find(g=>g.id===mode);
  if(!found)return;
- ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;resetArrangement();
+ ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();
  const seed=sessionSeed();
    ui.game=found.kind==='sequence'?createSequenceGame({mode,seed}):found.kind==='rack'?createRackGame({mode,seed}):found.kind==='tiles'?createTileGame({mode,seed}):found.kind==='low'?createLowGame({mode,seed}):found.kind==='eights'?createEightGame({mode,seed}):createContractGame({mode,seed});
- saveSolo();sound('card');render();window.scrollTo({top:0,behavior:'instant'});
+ saveSolo();sound('deal');render();window.scrollTo({top:0,behavior:'instant'});
 }
 function checkBotTurn(){
  if(isOnline())return;
  if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
+ const previous=ui.game;
  ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game):ui.game.kind==='rack'?runRackBot(ui.game):ui.game.kind==='tiles'?runTileBot(ui.game):ui.game.kind==='low'?runLowBot(ui.game):ui.game.kind==='eights'?runEightBot(ui.game):runContractBot(ui.game);
- saveSolo();sound('card');render();
+ showMoment(readGameBeat(previous,ui.game));
+ saveSolo();render();
 }
 function runResult(result,botAfter=false){
  if(result.error){toast(result.error,true);return;}
- ui.game=result.state;ui.selected=null;
- saveSolo();sound(ui.game.winner!==null||ui.game.roundWinner!=null?'success':'card');render();
+ const previous=ui.game;ui.game=result.state;ui.selected=null;
+ const beat=readGameBeat(previous,ui.game);showMoment(beat);
+ saveSolo();if(!beat)sound('card');render();
  if(botAfter)checkBotTurn();
 }
 
@@ -412,7 +493,8 @@ function syncRoom(view) {
   ui.mode=view.mode;
   ui.avatarId=view.players[view.seat]?.avatar??ui.avatarId;
   localStorage.setItem('stackhouse.avatar',String(ui.avatarId));
-  ui.game=view.game;
+  const previous=ui.game;ui.game=view.game;
+  if(changed)showMoment(readGameBeat(previous,ui.game));
   ui.screen=view.status==='playing'?'game':'room';
   if(changed){ui.selected=null;ui.lowAction='replace';}
   render();
@@ -644,14 +726,15 @@ app.addEventListener('click',event=>{
  if(!control)return;
  const action=control.dataset.action;
  if(action==='dismiss'&&event.target!==control)return;
- if(['home','scroll-games','avatars','toggle-sound','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
+ if(['home','scroll-games','avatars','toggle-sound','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
    switch(action){
-     case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;resetArrangement();render();break;
+     case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
      case 'avatars':ui.modal='avatars';sound();render();break;
      case 'rules':ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
      case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sound();render();break;
+     case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;
      case 'solo-resume':resumeSolo();break;
@@ -705,5 +788,7 @@ app.addEventListener('click',event=>{
 window.addEventListener('keydown',event=>{
  if(event.key==='Escape'&&ui.modal){ui.modal=null;render();}
 });
+document.addEventListener?.('visibilitychange',syncAmbience);
+window.addEventListener?.('pagehide',()=>{ambienceVoices.forEach(v=>{try{v.stop();}catch{}});ambienceVoices=[];ambienceGain=null;});
 render();
 restoreRoom();

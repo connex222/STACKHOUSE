@@ -1,3 +1,19 @@
+# STACKHOUSE SOCIAL — Phase 8: Make It Fun (v0.8.0)
+
+The ten games are unchanged; Phase 8 improves how they *feel* on both phones and desktop.
+
+- **Guided turns:** Every game has a short "Your next move" prompt that updates with the actual stage of the game, chosen cards, selected tiles, or turn ownership. The server remains authoritative for online legality.
+- **Moving cards and tiles:** New cards enter with short staggered dealing animations. Personal hand reordering uses a FLIP position animation so cards visually slide into their new slots. This is presentation-only: engine order and hidden cards are unchanged.
+- **Richer table sounds:** Small synthesised effects distinguish dealing, sorting, progress, completed rounds and wins. Sounds remain **opt-in and off by default**, and do not require downloads.
+- **Optional lounge ambience:** A separate ♫ switch enables a very quiet sustained musical pad, only while playing. It stops on the lobby and when the tab is hidden. Browser audio availability is handled gracefully.
+- **Game-specific moments:** Correct progress earns small feedback messages; completed contracts, cleared tile racks and wins receive extra emphasis. No fake scores or gameplay advantages are awarded.
+- **Victory celebration:** A brief gold flourish on successful banners, with a reduced-motion fallback. No modal interrupts the next round.
+- **Accessibility:** High contrast prompts, explicit focus outlines, accessible switch labels, motion respecting `prefers-reduced-motion`, and audio independent from gameplay.
+
+To build: `npm test`, `npm run build`, `npm run build:offline`. The latter creates a complete self-contained local bot file. Online play requires `npm start` or a Node Render deployment. Physical-phone feel and multiplayer acceptance testing are still outstanding; automated tests do not replace them.
+
+---
+
 ## Phase 7: Reliable private tables (v0.7.0)
 
 - Every browser action carries a cryptographically random ID. The server holds a bounded, seat-scoped acknowledgement ledger, so retries after a lost network response cannot deal, draw or play twice. Reused IDs with different payloads are refused.

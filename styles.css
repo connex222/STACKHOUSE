@@ -129,3 +129,28 @@
 .rematch-controls button{width:100%;min-height:42px}
 .game-banner .rematch-controls{margin-top:12px;max-width:340px;margin-inline:auto}
 @media(max-width:600px){.turn-notice{padding:11px 12px;gap:8px}.turn-notice small{flex-basis:100%}}
+
+/* Phase 8: celebratory game feel, guided turns, and touch-friendly table motion. */
+.next-move-guide{display:flex;align-items:center;gap:13px;margin:10px 0 19px;padding:13px 17px;border:1px solid #548b80;background:linear-gradient(115deg,rgba(12,71,68,.94),rgba(8,38,43,.97));border-radius:14px;box-shadow:inset 0 1px #ffffff19,0 10px 23px #00141636;color:#f7e7bb}
+.next-move-icon{font-size:25px;min-width:36px;text-align:center;filter:drop-shadow(0 2px 5px #0006)}
+.next-move-guide strong{display:block;font-size:14px;font-weight:800;letter-spacing:.01em}.next-move-guide p{margin:3px 0 0;color:#d0e4dd;font-size:12px;line-height:1.5}
+.next-move-guide.tone-celebrate,.next-move-guide.tone-finish{border-color:#e3bd73;background:linear-gradient(115deg,#575029,#153e3e)}
+.next-move-guide.tone-wait{border-color:#536c7a;background:linear-gradient(115deg,#183e48,#0b2932)}
+.icon-button.ambience-on{color:#ffe29e;box-shadow:0 0 0 2px #ffd78647,inset 0 0 18px #a47f2f44}
+.next-move-guide.tone-celebrate .next-move-icon{animation:feel-bounce .7s both}
+/* Animations never change a card's position in the game engine. */
+.hand-piece.feel-dealt{animation:feel-deal .4s cubic-bezier(.19,.92,.25,1.15) both;animation-delay:var(--feel-delay,0ms)}
+.play-card.selected-card,.tile-button:has(.tile-selected),.eight-card.selected-card{box-shadow:0 0 0 2px #f6ce7f,0 0 19px #e9bb5970,0 6px 12px #00191bbb}
+.draw-pile:not(:disabled):hover,.build-stack.valid-target:hover{filter:brightness(1.13);transform:translateY(-4px);box-shadow:0 9px 22px #05252999,0 0 0 2px #77e6cb4f}
+.draw-pile:not(:disabled):focus-visible,.build-stack.valid-target:focus-visible,.rack-slot:not(:disabled):focus-visible,.low-card:not(:disabled):focus-visible{outline:3px solid #94f6d6;outline-offset:4px}
+.game-banner.win{position:relative;isolation:isolate;border-color:#eed085;box-shadow:0 0 35px #f5d57a40,inset 0 1px #ffffff39}
+.game-banner.win:before{content:'✦  ✧  ✦  ✧  ✦';position:absolute;inset:-28px 0 auto;pointer-events:none;text-align:center;letter-spacing:1.4em;color:#f6cf73;font-size:20px;animation:feel-celebrate 1.7s ease-out both}
+.game-banner.win strong{animation:feel-bounce .66s cubic-bezier(.23,1,.32,1) both}
+.game-banner.win:after{content:'♠  ♥  ♦  ♣';pointer-events:none;display:block;letter-spacing:.65em;opacity:.5;font-size:18px;margin-top:12px}
+.moment-toast{position:fixed;z-index:150;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);min-width:min(320px,90vw);max-width:min(480px,90vw);padding:12px 18px;border:1px solid #e5cb8a;border-radius:100px;background:#073c38;box-shadow:0 14px 40px #0009;color:#fdf4db;font-size:13px;font-weight:800;text-align:center;pointer-events:none;animation:feel-moment 2.6s ease-in-out both}
+@keyframes feel-deal{from{opacity:0;transform:translate(0,-28px) rotate(-7deg) scale(.87)}to{opacity:1;transform:translate(0,0) rotate(0) scale(1)}}
+@keyframes feel-bounce{from{transform:scale(.75)}60%{transform:scale(1.12)}to{transform:scale(1)}}
+@keyframes feel-celebrate{from{opacity:0;transform:translateY(14px) scale(.75)}35%{opacity:1}to{opacity:0;transform:translateY(-26px) scale(1.3)}}
+@keyframes feel-moment{0%{opacity:0;transform:translate(-50%,20px) scale(.93)}12%,75%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-13px) scale(.96)}}
+@media(max-width:600px){.next-move-guide{margin:8px 0 13px;padding:12px;gap:8px}.next-move-guide p{font-size:11px}.next-move-guide strong{font-size:13px}.next-move-icon{font-size:21px;min-width:27px}.moment-toast{font-size:12px}.site-header .top-actions{gap:5px}}
+@media(prefers-reduced-motion:reduce){.hand-piece.feel-dealt,.game-banner.win:before,.game-banner.win strong,.next-move-guide .next-move-icon,.moment-toast{animation:none!important}.moment-toast{transform:translateX(-50%);opacity:1}}
