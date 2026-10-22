@@ -32,8 +32,8 @@ jobs:
       - name: Verify generated files
         run: |
           for file in assets/audio/masters/* assets/audio/{card-place,tile-place,victory}.mp3; do test -s "$file"; ffprobe -v error "$file" >/dev/null; done
-          npm test
           npm run build
+          npm test
       - name: Commit generated recordings
         run: |
           git config user.name 'stackhouse-audio-bot'
