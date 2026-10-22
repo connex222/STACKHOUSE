@@ -22,6 +22,8 @@ with sync_playwright() as p:
       Object.defineProperty(window.crypto,'randomUUID',{configurable:true,
         value:()=> '36ba6577-eaf1-4a50-a10d-a5b1e733ec08'});""")
     page.set_content(html,wait_until='commit',timeout=25000)
+    # Phase 22 moved diagnostics into the accessible Audio settings disclosure.
+    page.locator('#audio-settings > summary').click()
     page.locator('button[data-action="test-sound"]').wait_for(timeout=12000)
     assert page.get_by_role('button',name='Play test sound').count()==1
     assert page.get_by_role('slider',name='Game sound volume').count()==1
