@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createSequenceGame, playSequenceCard, discardSequenceCard, passSequenceTurn, canPassSequenceTurn, replenishSequenceHand, canReplenishSequenceHand } from '../engine/sequence.js';
-import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound } from '../engine/contracts.js';
+import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound, buyShanghaiDiscard } from '../engine/contracts.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard } from '../engine/rack.js';
 import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
 import { createLowGame, lowDraw, lowReplace, lowFlip, lowNextRound } from '../engine/lowcard.js';
@@ -80,14 +80,15 @@ export function projectGame(game, seat) {
     roundWinner:relative(game.roundWinner),
     players:order.map(i=>adapt(game.players[i],i===seat)),
     log:game.log.slice(0,12)};
-  if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length}};
+  if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length},finalRackPoints:game.winner===null?null:game.finalRackPoints?order.map(i=>game.finalRackPoints[i]):null};
   if(game.kind==='low')return {...shared,round:game.round,step:game.step,held:game.active===seat?game.held:null,drawnFrom:game.active===seat?game.drawnFrom:null,closingSeat:game.closingSeat===null?null:(game.closingSeat===seat?0:1),draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   if(game.kind==='eights')return {...shared,turn:game.turn,drew:game.drew,activeSuit:game.activeSuit,draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   if(game.kind==='sequence') return {...shared, rules:game.rules,turn:game.turn,builds:game.builds,stalemate:Boolean(game.stalemate),canPass:canPassSequenceTurn(game,seat),canRefill:canReplenishSequenceHand(game,seat)};
   if(game.kind==='rack') return {...shared,step:game.step,turn:game.turn,held:game.active===seat?game.held:null,
     draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  return {...shared,round:game.round,step:game.step,draw:{length:game.draw.length},
-    discard:game.discard,laid:game.laid};
+  return {...shared,round:game.round,step:game.step,matchLength:game.matchLength??'full',targetRounds:game.targetRounds??null,
+    canBuy:game.mode==='shanghai-nights'&&game.buyWindow===true&&game.active!==seat&&!game.buyUsed?.[seat]&&game.roundWinner===null&&game.winner===null,
+    draw:{length:game.draw.length},discard:game.discard,laid:game.laid};
 }
 
 /** In-process private room registry; optional snapshot file for restart persistence. */
@@ -174,33 +175,35 @@ export class RoomStore {
   }
   async create(options) {
     if(!options||typeof options!=='object'||Array.isArray(options))throw Error('Invalid room settings.');
-    let {mode,name,avatar,format='single',maxPlayers=2}=options;
+    let {mode,name,avatar,format='single',maxPlayers=2,matchLength='full'}=options;
     return this._exclusive(async()=>{
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
     if(!MODES.has(mode)) throw Error('Choose one of the available games.');
+    if(!['quick','full'].includes(matchLength))throw Error('Choose a full or quick match.');
+    if(!['phase-quest','contract-club','crown-circuit','shanghai-nights'].includes(mode))matchLength='full';
     format=tournamentFormat(format);
     if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>6)throw Error('Choose between 2 and 6 players.');
     if(maxPlayers>2&&(!GROUP_MODES.has(mode)||format!=='single'))throw Error('Group tables support eight selected games in single-game mode; Games Night Mix is for two players.');
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,startMode:mode,format,maxPlayers,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
+    const room={code,mode,startMode:mode,format,maxPlayers,matchLength,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
     });
   }
-  createGame(mode,seed,playerCount=2) {
+  createGame(mode,seed,playerCount=2,matchLength='full') {
     if(mode==='tile-royale')return createTileGame({mode,seed,playerCount});
     if(mode==='low-glow')return createLowGame({mode,seed});
     if(mode==='eight-shift')return createEightGame({mode,seed,playerCount});
     if(mode==='stack-run'||mode==='malice-duel')return createSequenceGame({mode,seed,playerCount});
     if(mode==='number-ladder')return createRackGame({mode,seed});
-    return createContractGame({mode,seed,playerCount});
+    return createContractGame({mode,seed,playerCount,matchLength});
   }
   // Called only while a room is waiting. Host can launch a group early once 3 seats are filled.
   _beginRoom(room) {
     const seed=randomBytes(4).readUInt32BE();
-    room.game=securelyDeal(this.createGame(room.mode,seed,room.players.length));
+    room.game=securelyDeal(this.createGame(room.mode,seed,room.players.length,room.format==='mixed'?'full':room.matchLength));
     room.game.players.forEach((p,i)=>{p.name=room.players[i].name;});
     room.game.log=[`Private table ready: ${room.players.map(p=>p.name).join(', ')}.`];
     room.status='playing';room.rematchVotes=Array(room.players.length).fill(false);
@@ -233,7 +236,7 @@ export class RoomStore {
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
-    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
+    return {code:room.code,mode:room.mode,matchLength:room.matchLength??'full',status:room.status,revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageKind};
   }
@@ -273,7 +276,7 @@ export class RoomStore {
       votes[seat]=choice;room.rematchVotes=votes;
       if(votes.every(Boolean)) {
         beginNextGame(room);
-        room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE(),room.players.length));
+        room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE(),room.players.length,room.format==='mixed'?'full':room.matchLength));
         room.game.players.forEach((p,i)=>p.name=room.players[i].name);
         room.game.log=[`Rematch started: ${room.players.map(p=>p.name).join(', ')}.`];
         room.rematchVotes=Array(room.players.length).fill(false);
@@ -287,7 +290,7 @@ export class RoomStore {
       if(kind==='next-round') {
         if(!['contract','low'].includes(game.kind)||game.roundWinner===null||game.winner!==null)throw Error('The next round is not yet available.');
         // Either player may continue a completed round.
-      } else if(game.active!==seat)throw Error('It is your opponent’s turn.');
+      } else if(game.active!==seat&&kind!=='contract-buy')throw Error('It is your opponent’s turn.');
       let outcome;
       switch(kind) {
         case 'tile-lay':
@@ -351,6 +354,9 @@ export class RoomStore {
             outcome=drawContractCard(shuffled,action.from);
           } else outcome=drawContractCard(game,action.from);
           break;
+        case 'contract-buy':
+          if(game.kind!=='contract')throw Error('Invalid Shanghai buying action.');
+          outcome=buyShanghaiDiscard(game,seat);break;
         case 'contract-discard':
           if(game.kind!=='contract'||!restrictedIndex(action.handIndex,100))throw Error('Invalid discard action.');
           outcome=discardContractCard(game,action.handIndex);break;

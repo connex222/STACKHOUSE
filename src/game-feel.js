@@ -4,6 +4,7 @@ export function nextMovePrompt(game,selected=null,opts={}) {
  const player=game.players?.[0];
  if(game.winner!==null&&game.winner!==undefined)return {title:game.winner===0?'You finished the match!':game.winner===-1?'It’s a draw!':'Good game!',detail:'Review the result and start another round with your opponent.',tone:'finish'};
  if(game.roundWinner!==null&&game.roundWinner!==undefined)return {title:game.roundWinner===0?'Contract completed!':'Round complete',detail:'Continue to the next round when you are ready.',tone:'finish'};
+ if(game.kind==='contract'&&game.canBuy)return {title:'Shanghai discard available to buy',detail:'You can purchase the declined discard out of turn, plus one penalty card. Tap Buy before the active player discards.',tone:'go'};
  if(game.active!==0)return {title:'Your opponent is thinking…',detail:'Your cards are safe. The next move will appear automatically.',tone:'wait'};
  switch(game.kind){
   case 'sequence':return selected?{title:'Card selected',detail:selected.type==='hand'?'Play on a glowing centre stack, or choose your discard pile to end your turn.':'Choose a highlighted centre stack to play this card.',tone:'go'}:{title:'Make your move',detail:`Try to play the top of your stockpile first (${player?.stock?.length??0} cards remaining).`,tone:'go'};

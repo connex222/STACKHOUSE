@@ -17,7 +17,7 @@ export function createTileGame({mode='tile-royale',seed=42,playerCount=2}={}){
  if(!Number.isInteger(playerCount)||playerCount<2||playerCount>6)throw Error('Tile Royale supports 2–6 players.');
  const draw=tileDeck(seed);
  const players=Array.from({length:playerCount},(_,i)=>({name:i===0?'You':i===1?'House Bot':`Player ${i+1}`,rack:draw.splice(0,14)}));
- return {kind:'tiles',mode,draw,players,groups:[],active:0,playedThisTurn:false,stalledTurns:0,winner:null,turn:1,log:['Build sets or colour runs of at least three tiles. Empty your rack to win.']};
+ return {kind:'tiles',mode,draw,players,groups:[],active:0,playedThisTurn:false,stalledTurns:0,winner:null,turn:1,log:['Build sets or colour runs. Clear your rack to win, or hold the fewest points if the pool runs dry.']};
 }
 function check(s){return s.winner===null?null:{error:'The match is finished.'};}
 export function tileLay(input,indices,target=null){const s=clone(input);const err=check(s);if(err)return err;
@@ -35,7 +35,7 @@ export function tileLay(input,indices,target=null){const s=clone(input);const er
 export function tileEndTurn(input,drawCard=false){const s=clone(input);const err=check(s);if(err)return err;
  if(!drawCard&&!s.playedThisTurn&&s.draw.length)return {error:'Play a group or draw a tile to end your turn.'};
  if(drawCard){if(s.playedThisTurn)return {error:'You have played tiles. End your turn without drawing.'};if(!s.draw.length)return {error:'No tiles remain to draw.'};s.players[s.active].rack.push(s.draw.pop());s.log.unshift(`${s.players[s.active].name} drew a tile.`);}
- if(!s.playedThisTurn&&!drawCard&&!s.draw.length){s.stalledTurns++;if(s.stalledTurns>=s.players.length){const scores=s.players.map(p=>p.rack.reduce((a,t)=>a+(t.wild?20:t.value),0));const minimum=Math.min(...scores);s.winner=scores.filter(n=>n===minimum).length===1?scores.indexOf(minimum):-1;s.log.unshift(s.winner===-1?'No tiles remain. The match is a draw on rack points.':`No tiles remain. ${s.players[s.winner].name} wins by rack points.`);}}else if(drawCard)s.stalledTurns=0;
+ if(!s.playedThisTurn&&!drawCard&&!s.draw.length){s.stalledTurns++;if(s.stalledTurns>=s.players.length){const scores=s.players.map(p=>p.rack.reduce((a,t)=>a+(t.wild?20:t.value),0));s.finalRackPoints=scores;const minimum=Math.min(...scores);s.winner=scores.filter(n=>n===minimum).length===1?scores.indexOf(minimum):-1;s.log.unshift(s.winner===-1?'No tiles remain. The match is a draw on final rack points.':`No tiles remain. ${s.players[s.winner].name} wins by rack points.`);}}else if(drawCard)s.stalledTurns=0;
  s.active=(s.active+1)%s.players.length;s.playedThisTurn=false;s.turn++;return {state:s};
 }
 function combos(n,k){const out=[],rec=(start,a)=>{if(a.length===k){out.push([...a]);return;}for(let i=start;i<=n-(k-a.length);i++){a.push(i);rec(i+1,a);a.pop();}};rec(0,[]);return out;}

@@ -100,11 +100,13 @@ export function findContract(hand,mission) {
   }
   return match(hand,0,[]);
 }
-export function createContractGame({ mode='phase-quest',seed=42,playerCount=2 }={}) {
+export function createContractGame({ mode='phase-quest',seed=42,playerCount=2,matchLength='full' }={}) {
   if(!Number.isInteger(playerCount)||playerCount<2||playerCount>6)throw Error('Contract tables support 2–6 players.');
   if(!MISSION_SETS[mode]) throw new Error(`Unknown contract mode: ${mode}`);
+  if(!['full','quick'].includes(matchLength)) throw new Error('Choose a full or quick contract match.');
   const state = {
-    kind:'contract',mode,seed,round:1,active:0,step:'draw',
+    kind:'contract',mode,seed,round:1,active:0,step:'draw',matchLength,
+    targetRounds:matchLength==='quick'?playerCount*2:null,buyWindow:false,buyUsed:[],
     players:Array.from({length:playerCount},(_,i)=>({name:i===0?'You':i===1?'House Bot':`Player ${i+1}`,mission:0,score:0,hand:[]})),
     draw:[],discard:[],laid:[],roundWinner:null,winner:null,
     log:[`Welcome to ${mode==='phase-quest'?'Phase Quest':mode==='crown-circuit'?'Crown Circuit':mode==='shanghai-nights'?'Shanghai Nights':'Contract Club'}. Complete your contract before the bot.`]
@@ -115,6 +117,7 @@ function dealRound(state) {
   state.draw=buildContractDeck((state.seed+Math.imul(state.round,0x9e3779b9))>>>0,state.mode,state.round);
   state.discard=[];
   state.laid=[];
+  state.buyWindow=false;state.buyUsed=Array(state.players.length).fill(false);
   for(const player of state.players) player.hand=state.draw.splice(-10);
   state.discard.push(state.draw.pop());
   state.step='draw';state.roundWinner=null;
@@ -138,7 +141,25 @@ export function drawContractCard(input,from='deck') {
   if(!picked) return {error:'No cards available from that pile.'};
   state.players[state.active].hand.push(picked);
   state.step='play';
+  // Shanghai: choosing the deck gives rivals one chance to buy the top discard.
+  state.buyWindow=state.mode==='shanghai-nights'&&from==='deck'&&state.discard.length>0&&state.draw.length>0;
   state.log.unshift(`${state.players[state.active].name} drew from ${from==='deck'?'the deck':'the discard pile'}.`);
+  return {state};
+}
+/** Shanghai Nights: an out-of-turn rival may buy the declined face-up discard.
+ * They must also draw a penalty card and cannot buy twice in one deal.
+ * The active player's turn and stage do not change. */
+export function buyShanghaiDiscard(input,buyerIndex) {
+  const state=clone(input);
+  if(state.mode!=='shanghai-nights')return {error:'Discard buying is only available in Shanghai Nights.'};
+  if(state.winner!==null||state.roundWinner!==null||state.step!=='play'||!state.buyWindow)return {error:'The discard is not available to buy now.'};
+  if(!Number.isInteger(buyerIndex)||buyerIndex<0||buyerIndex>=state.players.length||buyerIndex===state.active)return {error:'Only a waiting rival may buy.'};
+  state.buyUsed??=Array(state.players.length).fill(false);
+  if(state.buyUsed[buyerIndex])return {error:'You have already bought a discard this deal.'};
+  if(!state.discard.length||!state.draw.length)return {error:'There must be a discard and a penalty card available.'};
+  state.players[buyerIndex].hand.push(state.discard.pop(),state.draw.pop());
+  state.buyUsed[buyerIndex]=true;state.buyWindow=false;
+  state.log.unshift(`${state.players[buyerIndex].name} bought the discard and drew one penalty card.`);
   return {state};
 }
 export function discardContractCard(input,handIndex) {
@@ -148,6 +169,7 @@ export function discardContractCard(input,handIndex) {
   if(!Number.isInteger(handIndex) || handIndex<0 || handIndex>=player.hand.length) return {error:'Choose a card to discard.'};
   const [card]=player.hand.splice(handIndex,1);
   state.discard.push(card);
+  state.buyWindow=false;
   state.log.unshift(`${player.name} discarded ${card.wild?'a wild':card.value}.`);
   state.active=(state.active+1)%state.players.length;
   state.step='draw';
@@ -173,8 +195,17 @@ export function layContract(input) {
     return [{name:rival.name,penalty}];
   });
   state.roundWinner=state.active;
+  state.buyWindow=false;
   state.log.unshift(`${player.name} completed “${mission.title}”! ${penalties.map(p=>`${p.name}: +${p.penalty}`).join(' · ')} penalty points.`);
-  if(player.mission>=MISSION_SETS[state.mode].length) {
+  if(state.matchLength==='quick' && state.round>=state.targetRounds){
+    // A capped match makes penalties genuinely matter when contract counts tie.
+    const highest=Math.max(...state.players.map(p=>p.mission));
+    const contenders=state.players.map((p,i)=>({index:i,mission:p.mission,score:p.score})).filter(p=>p.mission===highest);
+    const lowest=Math.min(...contenders.map(p=>p.score));
+    const leaders=contenders.filter(p=>p.score===lowest);
+    state.winner=leaders.length===1?leaders[0].index:-1;
+    state.log.unshift(state.winner===-1?'Quick Match drawn: tied contracts and penalties.':`${state.players[state.winner].name} wins Quick Match: most contracts, then fewest penalty points.`);
+  }else if(player.mission>=MISSION_SETS[state.mode].length){
     state.winner=state.active;
     state.log.unshift(`${player.name} won the match!`);
   }
@@ -189,6 +220,12 @@ export function nextContractRound(input) {
 }
 export function runContractBot(input) {
   let state=clone(input);
+  // In the local Shanghai game, the bot can also make an off-turn discard purchase.
+  if(state.mode==='shanghai-nights'&&state.active===0&&state.buyWindow&&state.roundWinner===null&&state.winner===null){
+    const top=state.discard.at(-1),hand=state.players[1].hand;
+    const attractive=top?.wild||hand.some(card=>!card.wild&&(card.value===top?.value||(card.colour===top?.colour&&Math.abs(card.value-top.value)<=2)));
+    if(attractive&&!state.buyUsed?.[1])return buyShanghaiDiscard(state,1).state??state;
+  }
   if(state.active!==1 || state.roundWinner!==null || state.winner!==null) return state;
   const mission=currentMission(state,1);
   const top=state.discard.at(-1);

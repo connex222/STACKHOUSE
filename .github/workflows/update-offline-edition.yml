@@ -1,0 +1,38 @@
+name: Regenerate standalone offline edition
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'styles.css'
+      - 'scripts/build-offline.js'
+      - 'package.json'
+      - 'assets/**'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  regenerate-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Rebuild standalone edition
+        run: npm run build:offline
+      - name: Commit generated offline edition only when it changed
+        run: |
+          set -euo pipefail
+          git add PLAY-OFFLINE.html
+          if git diff --cached --quiet; then
+            echo 'Standalone edition already up to date.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Build: refresh Phase 21 standalone edition'
+          git push origin HEAD:main
