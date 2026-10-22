@@ -88,7 +88,7 @@ export function projectGame(game, seat) {
     draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   return {...shared,round:game.round,step:game.step,matchLength:game.matchLength??'full',targetRounds:game.targetRounds??null,dealTurns:game.dealTurns??0,dealTurnLimit:game.dealTurnLimit??null,
     canBuy:game.mode==='shanghai-nights'&&game.buyWindow===true&&game.active!==seat&&!game.buyUsed?.[seat]&&game.roundWinner===null&&game.winner===null,
-    draw:{length:game.draw.length},discard:game.discard,laid:game.laid,melds:game.mode==='contract-club'?game.melds??[]:[]};
+    draw:{length:game.draw.length},discard:game.discard,laid:game.laid,melds:game.mode==='contract-club'?(game.melds??[]).map(m=>({...m,owner:relative(m.owner)})):[]};
 }
 
 /** In-process private room registry; optional snapshot file for restart persistence. */

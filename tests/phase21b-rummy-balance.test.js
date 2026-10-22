@@ -100,6 +100,7 @@ test('Contract Club: multiplayer projection publishes melds while never leaking 
  assert.equal(after.game.melds.length,1);
  view=store.view(h.code,b.token);
  assert.equal(view.game.melds[0].cards.length,3);
+ assert.equal(view.game.melds[0].owner,1,'owners must map into the current player’s private seat order');
  assert.equal(view.game.players[1].hand.every(c=>c===null),true);
  await assert.rejects(store.move(h.code,a.token,{type:'contract-layoff',handIndex:0,meldIndex:0,revision:view.revision}),/opponent/);
  assert.equal(projectGame(store.rooms.get(h.code).game,0).players[1].hand.every(c=>c===null),true);
