@@ -1,4 +1,4 @@
-> **Current release: v1.5.0 — Phase 15 final security and usability audit.** See [Phase 15 release notes](README_PHASE15.md) for changes, verification and outstanding acceptance work.
+> **Current release: v1.6.0 — Phase 16 rules and accessibility corrections.** See [Phase 16 release notes](README_PHASE16.md) and the [independent release-validation checklist](README_RELEASE_VALIDATION.md).
 
 # STACKHOUSE SOCIAL — Previous releases
 

@@ -25,7 +25,7 @@ export function createSequenceGame({ mode = 'stack-run', seed = 42, playerCount 
   }));
   const state = {
     kind: 'sequence', mode, rules, draw, recycled: [], builds: Array.from({length: rules.piles},()=>[]),
-    players, active: 0, turn: 1, winner: null, log: [`Welcome to ${rules.title}. Clear your stockpile to win.`]
+    players, active: 0, turn: 1, winner: null, passStreak: 0, stalemate: false, log: [`Welcome to ${rules.title}. Clear your stockpile to win.`]
   };
   drawToFive(state);
   return state;
@@ -64,6 +64,47 @@ export function sequencePileTargets(state, card) {
     return (card.wild || card.value === needed) ? [index] : [];
   });
 }
+/** Only a completely exhausted, empty-handed seat with no playable stock or
+ * discard card can pass. This protects group games without allowing stalling. */
+export function canPassSequenceTurn(state, seat=state.active) {
+ if (state.winner!==null || seat!==state.active) return false;
+ const player=state.players[seat];
+ if (!player || player.hand.length || state.draw.length || state.recycled.length) return false;
+ return !sequenceSources(state,seat).some(source=>sequencePileTargets(state,source.card).length);
+}
+
+/** Recovery when a turn begins empty-handed but the completed build stacks
+ * supplied a recyclable deck on a different player's action. */
+export function canReplenishSequenceHand(state,seat=state.active) {
+ return state.winner===null && seat===state.active && state.players[seat]?.hand.length===0 && Boolean(state.draw.length||state.recycled.length);
+}
+export function replenishSequenceHand(input) {
+ if(!canReplenishSequenceHand(input))return {error:'No hand refill is currently available.'};
+ const state=clone(input);drawToFive(state);
+ state.log.unshift(`${state.players[state.active].name} refilled an empty hand.`);
+ state.passStreak=0;
+ return {state};
+}
+
+export function passSequenceTurn(input) {
+ if (!canPassSequenceTurn(input)) return {error:'You can only pass when the deck and your hand are empty and no stock or discard card can be played.'};
+ const state=clone(input),player=state.players[state.active];
+ state.passStreak=(state.passStreak||0)+1;
+ state.log.unshift(`${player.name} had no legal move and passed.`);
+ if (state.passStreak>=state.players.length) {
+   const fewest=Math.min(...state.players.map(p=>p.stock.length));
+   const tied=state.players.flatMap((p,i)=>p.stock.length===fewest?[i]:[]);
+   state.winner=tied.length===1?tied[0]:-1;
+   state.stalemate=true;
+   state.log.unshift(tied.length===1?`${state.players[tied[0]].name} wins the exhausted-deck showdown with the fewest stockpile cards.`:'Exhausted-deck showdown tied on remaining stockpile cards. The game is drawn.');
+ } else {
+   state.active=(state.active+1)%state.players.length;
+   state.turn++;
+   drawToFive(state);
+ }
+ return {state};
+}
+
 export function playSequenceCard(input, sourceType, sourceIndex, pileIndex) {
   const state = clone(input);
   if (state.winner !== null) return { error: 'The game has ended.' };
@@ -81,6 +122,7 @@ export function playSequenceCard(input, sourceType, sourceIndex, pileIndex) {
   if (sourceType === 'hand') sourcePile.splice(sourceIndex,1);
   else sourcePile.pop();
   pile.push({ ...card, playedValue: needed });
+  state.passStreak=0;
   state.log.unshift(`${player.name} played ${card.wild ? `a wild as ${needed}` : needed} from ${sourceType}.`);
   if (needed === 12) {
     state.recycled.push(...pile.splice(0));
@@ -103,6 +145,7 @@ export function discardSequenceCard(input, handIndex, discardIndex) {
   if (!Number.isInteger(handIndex) || handIndex < 0 || handIndex >= player.hand.length) return { error: 'Choose a card from your hand.' };
   const [card] = player.hand.splice(handIndex,1);
   player.discards[discardIndex].push(card);
+  state.passStreak=0;
   state.log.unshift(`${player.name} discarded ${card.wild ? 'wild' : card.value} and finished their turn.`);
   state.active = (state.active + 1) % state.players.length;
   state.turn += 1;
@@ -135,7 +178,15 @@ export function runSequenceBot(input,difficulty='standard') {
     const finalPile=shortest>=0?shortest:piles.map(p=>p.length).indexOf(Math.min(...piles.map(p=>p.length)));
     return discardSequenceCard(state,bestIndex,finalPile).state;
   }
-  state.active = 0;
+  if (canReplenishSequenceHand(state)) {
+    // The solo House Bot has reached its safety move limit. Refill and yield.
+    state=replenishSequenceHand(state).state;
+    state.active=0;
+    return state;
+  }
+  if (canPassSequenceTurn(state)) return passSequenceTurn(state).state;
+  // Preserve the solo demo safety turn cap, even if there are more than 65 plays.
+  state.active=0;
   drawToFive(state);
   return state;
 }

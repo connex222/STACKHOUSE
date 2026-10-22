@@ -3,7 +3,7 @@ import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-
 import {SOLO_SAVE_KEY,encodeSoloSave,decodeSoloSave} from './solo-save.js';
 import {SOLO_RESULTS_KEY,decodeSoloResults,registerSoloResult,soloTotals} from './solo-records.js';
 import {nextMovePrompt,readGameBeat,visibleHandSignature} from './game-feel.js';
-import { createSequenceGame, sequencePileTargets, playSequenceCard, discardSequenceCard, runSequenceBot } from './engine/sequence.js';
+import { createSequenceGame, sequencePileTargets, playSequenceCard, discardSequenceCard, passSequenceTurn, canPassSequenceTurn, replenishSequenceHand, canReplenishSequenceHand, runSequenceBot } from './engine/sequence.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard, runRackBot } from './engine/rack.js';
 import { createContractGame, currentMission, missionDescription, findContract, drawContractCard, discardContractCard, layContract, nextContractRound, runContractBot, MISSION_SETS } from './engine/contracts.js';
 import {createTileGame,tileLay,tileEndTurn,runTileBot,tileMeld} from './engine/tiles.js';
@@ -17,13 +17,13 @@ const avatars = [
 const GROUP_GAME_IDS=new Set(['eight-shift','stack-run','malice-duel','tile-royale','phase-quest','contract-club','crown-circuit','shanghai-nights']);
 const games = [
  { id:'stack-run', title:'Stack Run', category:'Sequencing / strategy', kicker:'BUILD. STACK. OUTPLAY.',description:'Climb from 1 to 12 across shared stacks. Your stockpile is the real race.',players:'2–6 players + bot demo', icon:'↗', art:'run',kind:'sequence',tag:'Most like Skip-Bo' },
- { id:'phase-quest', title:'Phase Quest', category:'Contracts / strategy', kicker:'TEN MISSIONS. ONE WINNER.',description:'Build sets, runs and colour groups. Every successful contract moves you forward.',players:'2–6 players + bot demo',icon:'✦',art:'phase',kind:'contract',tag:'Most like Phase 10' },
+ { id:'phase-quest', title:'Phase Quest', category:'Contracts / strategy', kicker:'TEN MISSIONS. ONE WINNER.',description:'Complete sets, runs and colour groups. Laying your full contract immediately ends the round.',players:'2–6 players + bot demo',icon:'✦',art:'phase',kind:'contract',tag:'Most like Phase 10' },
  { id:'malice-duel', title:'Malice Duel', category:'Competitive sequencing',kicker:'MAKE EVERY CARD COUNT.',description:'Three shared stacks, a deeper stockpile and just enough room for revenge.',players:'2–6 players + bot demo',icon:'♠',art:'malice',kind:'sequence',tag:'Spite & Malice inspired' },
- { id:'contract-club', title:'Contract Club', category:'Classic rummy contracts', kicker:'READ THE ROOM. MAKE THE MELD.',description:'Seven rising contracts, tactical discards and a race to lay the right combination.',players:'2–6 players + bot demo',icon:'♣',art:'contract',kind:'contract',tag:'Contract Rummy inspired' },
- { id:'crown-circuit',title:'Crown Circuit',category:'Five-suit wild-card rummy',kicker:'THE WILD RANK NEVER STAYS STILL.',description:'Eleven rising contracts, five suits, changing wild ranks, and a final royal challenge.',players:'2–6 players + bot demo',icon:'♛',art:'crown',kind:'contract',tag:'Five Crowns-style variant' },
+ { id:'contract-club', title:'Contract Club', category:'Classic rummy contracts', kicker:'READ THE ROOM. MAKE THE MELD.',description:'Seven house contracts. The first player to lay their full combination ends the round.',players:'2–6 players + bot demo',icon:'♣',art:'contract',kind:'contract',tag:'Contract Rummy inspired' },
+ { id:'crown-circuit',title:'Crown Circuit',category:'Five-suit wild-card rummy',kicker:'THE WILD RANK NEVER STAYS STILL.',description:'Eleven five-suit contracts with changing wild ranks. Laying first ends each round.',players:'2–6 players + bot demo',icon:'♛',art:'crown',kind:'contract',tag:'Five Crowns-style variant' },
  { id:'number-ladder',title:'Number Ladder',category:'Number ordering / strategy',kicker:'TEN SLOTS. ONE PERFECT ORDER.',description:'Swap one card at a time to build an ascending ladder from 1 to 60.',players:'2 players + bot demo',icon:'↟',art:'ladder',kind:'rack',tag:'Rack-O-style ordering' },
- { id:'shanghai-nights',title:'Shanghai Nights',category:'Progressive contract rummy',kicker:'SEVEN DEALS. SEVEN CHALLENGES.',description:'Seven escalating meld missions in a tactical Shanghai-inspired house variant.',players:'2–6 players + bot demo',icon:'✴',art:'shanghai',kind:'contract',tag:'Shanghai-style contracts' },
- {id:'tile-royale',title:'Tile Royale',category:'Tile sets and colour runs',kicker:'MAKE YOUR MARK ON THE TABLE.',description:'Form colourful sets and consecutive runs, extend table groups, and clear your rack.',players:'2–6 players + bot demo',icon:'▦',art:'tile',kind:'tiles',tag:'Number-tile rummy variant'},
+ { id:'shanghai-nights',title:'Shanghai Nights',category:'Progressive contract rummy',kicker:'SEVEN DEALS. SEVEN CHALLENGES.',description:'Seven house-contract missions; laying first ends the round. No discard buying.',players:'2–6 players + bot demo',icon:'✴',art:'shanghai',kind:'contract',tag:'Shanghai-style contracts' },
+ {id:'tile-royale',title:'Tile Royale',category:'Tile sets and colour runs',kicker:'MAKE YOUR MARK ON THE TABLE.',description:'Form sets and runs, extend table groups (no rearrangement), and empty your rack.',players:'2–6 players + bot demo',icon:'▦',art:'tile',kind:'tiles',tag:'Number-tile rummy variant'},
  {id:'low-glow',title:'Low Glow',category:'Memory / low-score cards',kicker:'THE LOWEST SCORE WINS.',description:'Flip, swap and clear matching columns across four fast rounds.',players:'2 players + bot demo',icon:'⬡',art:'low',kind:'low',tag:'Skyjo-style house game'},
  {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2–6 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
 ];
@@ -213,7 +213,7 @@ function playerBadge(name,image,meta,active=false) {
 function seqCard(card,action,attributes='',chosen=false) {
   if (!card) return `<div class="card-slot empty-slot"><span>+</span></div>`;
   const top=card.wild?'★':card.value;
-  return `<button class="play-card ${card.wild?'wild-card':'number-card'} ${chosen?'selected-card':''}" data-action="${action}" ${attributes} aria-label="${card.wild?'Wild card':`Card ${card.value}`}">
+  return `<button class="play-card ${card.wild?'wild-card':'number-card'} ${chosen?'selected-card':''}" data-action="${action}" ${attributes} ${action==='seq-source'?`aria-pressed="${chosen}"`:''} aria-label="${card.wild?'Wild card':`Card ${card.value}`}">
     <span class="corner-value">${top}</span><span class="card-core">${top}</span><span class="corner-suit">${card.wild?'WILD':'◆'}</span></button>`;
 }
 function buildPile(state,index) {
@@ -256,7 +256,7 @@ function turnNotice(){
  const completed=ui.game.winner!==null,roundOver=ui.game.roundWinner!==null&&ui.game.roundWinner!==undefined,playing=ui.game.active===0;
  const activeName=ui.game.players[ui.game.active]?.name??'Another player';
  const winnerName=ui.game.players[ui.game.roundWinner]?.name??'Another player';
- return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}" role="status" aria-live="polite"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':roundOver?`${escapeHtml(winnerName)} won the round`:playing?'YOUR TURN':`${escapeHtml(activeName)}’s turn`}</strong><small>${completed?'Choose whether to play again':roundOver?'Continue to the next deal':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
+ return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':roundOver?`${escapeHtml(winnerName)} won the round`:playing?'YOUR TURN':`${escapeHtml(activeName)}’s turn`}</strong><small>${completed?'Choose whether to play again':roundOver?'Continue to the next deal':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
 }
 function activeStorageNotice(){
  if(!isOnline()||!ui.online?.view||ui.online.view.status!=='playing')return '';
@@ -309,6 +309,8 @@ function resetArrangement(){ui.handOrders={};ui.orderUndo=[];ui.arranging=false;
 function sequenceScreen() {
  const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo();
  const isHuman=s.active===0&&s.winner===null;
+ const canPass=isHuman&&(isOnline()?Boolean(s.canPass):canPassSequenceTurn(s));
+ const canRefill=isHuman&&(isOnline()?Boolean(s.canRefill):canReplenishSequenceHand(s));
  const selected=ui.selected;
  const side=`<div class="side-panel objectives"><span class="eyebrow">YOUR OBJECTIVE</span><h3>Empty the stockpile.</h3><p>Build the centre stacks upwards from 1 to 12. Play from your stockpile, hand, or the top of your discard stacks.</p>
    <div class="progress-row"><span>Stockpile remaining</span><b>${p.stock.length} / ${s.rules.stock}</b></div><div class="track"><span style="width:${Math.round((s.rules.stock-p.stock.length)/s.rules.stock*100)}%"></span></div>
@@ -316,22 +318,24 @@ function sequenceScreen() {
  return `<main class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner">
   <div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${bot.stock.length} cards in stockpile`)}<div class="bot-cards">${Array.from({length:Math.min(5,bot.hand.length)},()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
   <div class="felt-area"><div class="board-section-label">SHARED BUILDING STACKS</div><div class="build-grid">${s.builds.map((_,i)=>buildPile(s,i)).join('')}</div>
-   <div class="board-hint">${s.winner!==null?'The match is over.': selected?.type==='hand'?'Choose a green stack to play, or a discard pile to finish your turn.': selected?'Choose a highlighted building stack.':'Select a card, then select a building stack.'}</div>
+   <div class="board-hint">${s.winner!==null?'The match is over.':canRefill?'Refill your hand from the available deck.':canPass?'No cards or playable moves remain. Pass your turn.': selected?.type==='hand'?'Choose a green stack to play, or a discard pile to finish your turn.': selected?'Choose a highlighted building stack.':'Select a card, then select a building stack.'}</div>
   </div>
   <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.stock.length} cards left in your stockpile`,isHuman)}</div>
   <div class="your-tableau"><div class="hand-heading"><b>YOUR STOCKPILE</b><b>YOUR DISCARD STACKS</b></div><div class="stock-discard-row"><div class="stock-zone">${seqCard(p.stock.at(-1),'seq-source','data-type="stock" data-index="0"',selected?.type==='stock')}</div><div class="four-mini-piles">${p.discards.map((pile,i)=>seqDiscardPile(pile,i)).join('')}</div></div>
   <div class="hand-heading"><b>YOUR HAND <span>(${p.hand.length} cards)</span></b><small>${isHuman?'Select a card to play':'Waiting for turn'}</small></div>
   ${handToolbar('sequence')}<div class="hand-cards reordable-hand">${handItems('sequence',p.hand,(card,i)=>seqCard(card,'seq-source',`data-type="hand" data-index="${i}"`,selected?.type==='hand'&&selected.index===i))}</div>
+  ${canPass?'<button class="btn btn-outline" data-action="seq-pass">Pass — no legal moves</button>':''}
+  ${canRefill?'<button class="btn btn-primary" data-action="seq-refill">Refill empty hand</button>':''}
   ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
-  <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'}>Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
+  <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'} aria-pressed="${selected?.type==='discard'&&selected.index===i}">Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
  </div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU WON THE TABLE!':isOnline()?`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`:'THE HOUSE BOT WON'}</strong><span>${s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'MATCH DRAWN':s.winner===0?'YOU WON THE TABLE!':isOnline()?`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`:'THE HOUSE BOT WON'}</strong><span>${s.stalemate?'The deck is exhausted. Fewest stockpile cards wins; a tie is a draw.':s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
 }
 function contractCard(card,i) {
  const shown=card.wild?'★':card.value;
  return `<button class="play-card contract-card suit-${card.colour} ${card.wild?'wild-card':''} ${ui.selected?.type==='contract-hand'&&ui.selected.index===i?'selected-card':''}"
- data-action="contract-card" data-index="${i}" aria-label="${card.wild?'Wild card':`${card.value}, ${card.colour}`}">
+ data-action="contract-card" data-index="${i}" aria-pressed="${ui.selected?.type==='contract-hand'&&ui.selected.index===i}" aria-label="${card.wild?'Wild card':`${card.value}, ${card.colour}`}">
  <span class="corner-value">${shown}</span><span class="card-core">${shown}</span><span class="corner-suit">${card.wild?'WILD':card.colour.toUpperCase()}</span></button>`;
 }
 function contractScreen() {
@@ -407,7 +411,7 @@ function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(
  ${s.roundWinner!==null?`<div class="game-banner ${s.winner===-1?'':s.winner===null?'win':s.winner===0?'win':'lose'}"><strong>${s.winner!==null?s.winner===-1?'MATCH TIED':s.winner===0?'LOW-SCORE CHAMPION!':'YOUR OPPONENT WON':`ROUND ${s.round} FINISHED`}</strong><span>Totals: You ${p.score} · ${isOnline()?escapeHtml(opponentName()):'Bot'} ${opp.score} points.</span>${isOnline()&&s.winner!==null?rematchControl():`<button class="btn btn-primary" data-action="${s.winner===null?'next-round':'restart'}">${s.winner===null?'Next round':'New match'}</button>`}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 const suitsGlyph={hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
-function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
+function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${card.value===8?`aria-pressed="${ui.selected?.type==='eight'&&ui.selected.index===i}"`:''} ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
 function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.winner===null,top=s.discard.at(-1);
  const noDrawPass=!s.draw.length&&s.discard.length<=1&&!p.hand.some(card=>eightCanPlay(card,s));
  const side=`<div class="side-panel objectives"><span class="eyebrow">CARD MATCHING</span><h3>Get rid of every card.</h3><p>Match the discard's suit or rank, or play a wild eight and declare a new suit. Draw once if you need a card; you may then play or pass.</p><div class="side-tip">${icon('sparkle',16)} Play the colour or rank, but save your wild eights for difficult turns.</div></div>`;
@@ -422,14 +426,14 @@ function rulesText() {
  const g=gameInfo(),contract=g.kind==='contract';
  return g.kind==='tiles'?`<p>Each player starts with fourteen numbered tiles. Lay matching-number groups of three or four (each colour different) or same-colour consecutive runs of at least three.</p><ol><li>Select tiles in your rack, then lay a valid group onto the table.</li><li>Or select tiles and tap an existing group to extend it without making the group invalid.</li><li>After laying any tiles, end your turn. If you cannot or choose not to lay any, draw one tile instead.</li><li>First to empty their rack wins.</li></ol><p>House variant: table groups can be extended, not rearranged. Wild tiles act as jokers.</p>`:g.kind==='low'?`<p>Four rounds of card swapping. The player with the lowest accumulated total wins.</p><ol><li>Your 3 × 4 grid starts with two revealed cards.</li><li>Draw from the deck or take the face-up discard.</li><li>Swap your chosen card into any uncleared position. Alternatively, discard a deck draw and reveal one hidden card.</li><li>Three matching face-up values in the same column clear all three cards, scoring zero.</li><li>Once someone reveals their entire grid, the opponent takes one final turn. Hidden cards still score their values.</li><li>Play four rounds; lowest total wins. A tie is possible.</li></ol><p>Original four-round house variation inspired by low-score card games.</p>`:g.kind==='eights'?`<p>Match the top discarded card by suit or rank, or play an eight to declare any suit.</p><ol><li>Play a highlighted legal card from your hand.</li><li>For an eight, choose the suit that must be followed next.</li><li>If you do not play, draw one card. You may play after drawing, or pass.</li><li>The first player to empty their hand wins. If the deck is completely blocked, players may pass and the lowest hand points win (or tie).</li></ol><p>Original simplified card-matching variant using a standard deck.</p>`:g.kind==='rack'?`<p>Build an ascending rack of ten cards from 1 to 60. Every card must be higher than the one before it.</p><ol><li>Draw the top card from the face-down deck or face-up discard pile.</li><li>Replace any one of your ten slots, or discard the card you picked up.</li><li>The replaced card becomes the new discard.</li><li>First player with all ten cards in strict ascending order wins.</li></ol><p>The other player's rack is always hidden. This is an original number-ordering variant.</p>`:contract?`<p>Take turns drawing one card from the deck or the face-up discard pile. Your goal is to collect the entire combination shown in the Current Contract panel.</p>
  <ol><li>Draw one card.</li><li>If your hand contains the full contract, choose <strong>Lay my contract</strong>.</li><li>Otherwise select a card from your hand and choose <strong>Discard selected card</strong>.</li><li>The first player to lay a complete contract wins that round and advances to their next mission. Every other player stays on their current mission and receives penalty points for the cards in their own hand.</li><li>Finish all ${MISSION_SETS[ui.mode].length} contracts to win the match. Each opponent's unlaid cards count as penalty points.</li></ol>
- <p>${ui.mode==='crown-circuit'?'Crown Circuit has five suits, ranks 3–13, and a wild rank that changes with each new round. This is an original contract-based variant, not the exact Five Crowns rules.':ui.mode==='shanghai-nights'?'Shanghai Nights uses seven house contracts; discard buying is not part of this version.':''}</p><p>Wild cards can substitute for any number or colour. For a run, numbers must be consecutive, with no duplicate fixed numbers. Lower penalty scores are preferable as a tie-breaker.</p>`
+ <p>${ui.mode==='crown-circuit'?'Crown Circuit has five suits, ranks 3–13, and a wild rank that changes with each new round. This is an original contract-based variant, not the exact Five Crowns rules.':ui.mode==='shanghai-nights'?'Shanghai Nights uses seven house contracts; discard buying is not part of this version.':''}</p><p>Wild cards can substitute for any number or colour. For a run, numbers must be consecutive, with no duplicate fixed numbers. Penalty scores are tracked for comparison only; the first player to finish their final contract wins the match.</p>`
  :`<p>Race your opponent to clear your personal stockpile. Build shared centre stacks upwards from 1 to 12. A wild card substitutes for whatever number is needed next.</p>
- <ol><li>Select the face-up card from your <strong>stockpile</strong>, hand, or one of your four discard stacks.</li><li>Choose a highlighted shared building stack to play that card. Each stack begins at 1, goes to 12, then clears.</li><li>You may keep playing while you have legal moves. If your hand becomes empty it automatically refills to five.</li><li>To finish your turn, select a card from your hand, then choose a personal discard stack.</li><li>The first player to empty their stockpile wins.</li></ol><p>Only the top card of a personal discard stack can be played. Always prioritise your stockpile — those are the cards that count towards victory.</p>`;
+ <ol><li>Select the face-up card from your <strong>stockpile</strong>, hand, or one of your four discard stacks.</li><li>Choose a highlighted shared building stack to play that card. Each stack begins at 1, goes to 12, then clears.</li><li>You may keep playing while you have legal moves. If your hand becomes empty it automatically refills to five.</li><li>To finish your turn, select a card from your hand, then choose a personal discard stack.</li><li>The first player to empty their stockpile wins. If you have no hand cards, no available deck cards and no legal stock or discard play, use Pass.</li><li>If everybody is forced to pass consecutively, the player with the fewest stockpile cards wins. Equal lowest counts make the match a draw.</li></ol><p>Only the top card of a personal discard stack can be played. Always prioritise your stockpile — those are the cards that count towards victory.</p>`;
 }
 function modalContent() {
  if(!ui.modal)return '';
  const avatarModal=ui.modal==='avatars';
- return `<div class="modal-scrim" data-action="dismiss" role="presentation"><section class="modal ${avatarModal?'avatars-modal':'rules-modal'}" role="dialog" aria-modal="true" aria-labelledby="modal-heading">
+ return `<div class="modal-scrim" data-action="dismiss" role="presentation"><section class="modal ${avatarModal?'avatars-modal':'rules-modal'}" role="dialog" aria-modal="true" aria-labelledby="modal-heading" tabindex="-1">
  <div class="modal-heading"><div><div class="eyebrow">${avatarModal?'THE STACKHOUSE CAST':'TABLE INSTRUCTIONS'}</div><h2 id="modal-heading">${avatarModal?'Choose your character':'How to play '+gameInfo().title}</h2></div><button class="close-btn" data-action="close" aria-label="Close">${icon('close',22)}</button></div>
  ${avatarModal?`<p class="modal-lead">Sixteen distinct personalities. The one you select appears at every table.</p><div class="avatar-grid">${avatars.map(a=>`<button class="avatar-choice ${a.id===ui.avatarId?'picked':''}" data-action="choose-avatar" data-id="${a.id}">
   <img src="${a.image}" alt="${a.name}" loading="eager"><span>${escapeHtml(a.name)}</span>${a.id===ui.avatarId?`<i>${icon('check',13)}</i>`:''}</button>`).join('')}</div>`
@@ -461,13 +465,61 @@ function animateTable(rects,handChanged){
   }
  }
 }
+// Preserve focus across the existing full-page rendering system.
+let previousModal=null;
+let modalReturnFocus=null;
+let previousAnnouncement='';
+function focusLocator(element){
+ if(!element || element===document.body || !app.contains(element))return null;
+ const piece=element.closest?.('.hand-piece[data-order-key]');
+ const attributes=['data-action','data-index','data-type','data-mode','data-from','data-id','data-order-zone','data-order-position'];
+ const attrs=Object.fromEntries(attributes.filter(name=>element.hasAttribute(name)).map(name=>[name,element.getAttribute(name)]));
+ const matching=[...app.querySelectorAll(element.tagName.toLowerCase())].filter(el=>Object.entries(attrs).every(([name,value])=>el.getAttribute(name)===value));
+ return {id:element.id||null,tag:element.tagName,attrs,ordinal:matching.indexOf(element),handKey:piece?.dataset.orderKey||null,handZone:piece?.dataset.orderZone||null};
+}
+function restoreFocus(locator){
+ if(!locator)return false;
+ let candidates=[...app.querySelectorAll(locator.tag.toLowerCase())];
+ if(locator.id){const byId=document.getElementById(locator.id);if(byId)candidates=[byId,...candidates];}
+ if(locator.handKey){
+   const piece=[...app.querySelectorAll('.hand-piece[data-order-key]')].find(el=>el.dataset.orderKey===locator.handKey && el.dataset.orderZone===locator.handZone);
+   if(piece)candidates=[...piece.querySelectorAll(locator.tag.toLowerCase()),...candidates];
+ }
+ const match=el=>Object.entries(locator.attrs).every(([attr,value])=>el.getAttribute(attr)===value);
+ let matching=candidates.filter(el=>!el.disabled&&match(el));
+ let target=locator.ordinal>=0?matching[locator.ordinal]||matching[0]:matching[0];
+ if(!target && locator.attrs['data-action'])target=candidates.find(el=>!el.disabled&&el.getAttribute('data-action')===locator.attrs['data-action']);
+ if(!target && locator.handKey)target=candidates.find(el=>!el.disabled&&el.closest('.hand-piece'));
+ if(!target)return false;
+ target.focus({preventScroll:true});return document.activeElement===target;
+}
+function announceStatus(){
+ const status=document.getElementById('stackhouse-status');if(!status)return;
+ const s=ui.game;
+ const message=ui.toast?.message||ui.orderMessage|| (ui.screen==='game'&&s?
+ (s.winner!==null?(s.winner===-1?'Match drawn.':s.winner===0?'You won the match.':'Match complete.'):
+ (s.active===0?'Your turn.':`${s.players[s.active]?.name||'Opponent'}’s turn.`)):'');
+ if(message!==previousAnnouncement){status.textContent=message;previousAnnouncement=message;}
+}
 function render(){
+ const currentFocus=focusLocator(document.activeElement);
+ if(ui.modal&&!previousModal)modalReturnFocus=currentFocus;
  const beforeRects=capturePieceRects();
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 14</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
- ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 16</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
+ ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
+ const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
+ if(backdrop)backdrop.inert=Boolean(ui.modal);
+ if(ui.modal){
+   const modal=typeof app.querySelector==='function'?app.querySelector('[role="dialog"]'):null;
+   if(!previousModal)modal?.querySelector('[data-action="close"]')?.focus({preventScroll:true});
+   else if(!restoreFocus(currentFocus))modal?.querySelector('[data-action="close"]')?.focus({preventScroll:true});
+ }else if(previousModal){restoreFocus(modalReturnFocus);modalReturnFocus=null;}
+ else restoreFocus(currentFocus);
+ previousModal=ui.modal;
+ announceStatus();
  animateTable(beforeRects,handChanged);
  lastMotionSignature=motionSignature;
  syncAmbience();
@@ -491,7 +543,7 @@ function checkBotTurn(){
 }
 function runResult(result,botAfter=false){
  if(result.error){toast(result.error,true);return;}
- const previous=ui.game;ui.game=result.state;ui.selected=null;
+ const previous=ui.game;ui.game=result.state;ui.selected=null;ui.orderMessage='';
  const beat=readGameBeat(previous,ui.game);showMoment(beat);
  saveSolo();if(!beat)sound('card');render();
  if(botAfter)checkBotTurn();
@@ -542,6 +594,7 @@ function syncRoom(view) {
   if(!ui.online||ui.online.code!==view.code)return;
   if(ui.online.view && view.revision<ui.online.view.revision)return; // Never roll back newer state on a slow stream.
   const changed=ui.online.view?.revision!==view.revision;
+  if(changed)ui.orderMessage='';
   ui.online.view=view;
   if(ui.mode!==view.mode)resetArrangement();
   ui.mode=view.mode;
@@ -759,6 +812,8 @@ app.addEventListener('click',event=>{
   else if(action==='eight-pass')command={type:'eight-pass'};
   else if(action==='eight-suit'&&ui.selected?.type==='eight')command={type:'eight-play',index:ui.selected.index,suit:control.dataset.suit};
   else if(action==='eight-card'&&ui.game?.players[0].hand[Number(control.dataset.index)]?.value!==8)command={type:'eight-play',index:Number(control.dataset.index)};
+  else if(action==='seq-refill')command={type:'sequence-refill'};
+  else if(action==='seq-pass')command={type:'sequence-pass'};
   else if(action==='build'&&ui.selected)command={type:'sequence-play',sourceType:ui.selected.type,sourceIndex:ui.selected.index,pileIndex:Number(control.dataset.index)};
   else if(action==='seq-discard-dest'&&ui.selected?.type==='hand')command={type:'sequence-discard',handIndex:ui.selected.index,discardIndex:Number(control.dataset.index)};
   else if(action==='rack-draw')command={type:'rack-draw',from:control.dataset.from};
@@ -812,6 +867,10 @@ app.addEventListener('click',event=>{
      const type=control.dataset.type,index=Number(control.dataset.index);
      if(type==='hand'?!p.hand[index]:type==='stock'?!p.stock.length:!p.discards[index]?.length)return;
      ui.selected=ui.selected?.type===type&&ui.selected?.index===index?null:{type,index};sound();render();
+   } else if(action==='seq-pass'){
+     runResult(passSequenceTurn(ui.game),true);
+   } else if(action==='seq-refill'){
+     runResult(replenishSequenceHand(ui.game));
    } else if(action==='build'){
      if(!ui.selected){toast('Choose a card first.',true);return;}
      runResult(playSequenceCard(ui.game,ui.selected.type,ui.selected.index,Number(control.dataset.index)));
@@ -848,8 +907,17 @@ app.addEventListener('click',event=>{
  }
 });
 window.addEventListener('keydown',event=>{
- if(event.key==='Escape'&&ui.modal){ui.modal=null;render();}
-});
+ if(!ui.modal)return;
+ if(event.key==='Escape'){event.preventDefault();ui.modal=null;render();return;}
+ if(event.key!=='Tab')return;
+ const modal=app.querySelector('[role="dialog"]');if(!modal)return;
+ const controls=[...modal.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]')]
+   .filter(el=>el.getClientRects().length);
+ if(!controls.length){event.preventDefault();return;}
+ const first=controls[0],last=controls.at(-1);
+ if(event.shiftKey&&(document.activeElement===first||!modal.contains(document.activeElement))){event.preventDefault();last.focus();}
+ else if(!event.shiftKey&&(document.activeElement===last||!modal.contains(document.activeElement))){event.preventDefault();first.focus();}
+},true);
 document.addEventListener?.('visibilitychange',syncAmbience);
 window.addEventListener?.('pagehide',()=>{ambienceVoices.forEach(v=>{try{v.stop();}catch{}});ambienceVoices=[];ambienceGain=null;});
 render();

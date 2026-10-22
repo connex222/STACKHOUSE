@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { createSequenceGame, playSequenceCard, discardSequenceCard } from '../engine/sequence.js';
+import { createSequenceGame, playSequenceCard, discardSequenceCard, passSequenceTurn, canPassSequenceTurn, replenishSequenceHand, canReplenishSequenceHand } from '../engine/sequence.js';
 import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound } from '../engine/contracts.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard } from '../engine/rack.js';
 import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
@@ -83,7 +83,7 @@ export function projectGame(game, seat) {
   if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length}};
   if(game.kind==='low')return {...shared,round:game.round,step:game.step,held:game.active===seat?game.held:null,drawnFrom:game.active===seat?game.drawnFrom:null,closingSeat:game.closingSeat===null?null:(game.closingSeat===seat?0:1),draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   if(game.kind==='eights')return {...shared,turn:game.turn,drew:game.drew,activeSuit:game.activeSuit,draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  if(game.kind==='sequence') return {...shared, rules:game.rules,turn:game.turn,builds:game.builds};
+  if(game.kind==='sequence') return {...shared, rules:game.rules,turn:game.turn,builds:game.builds,stalemate:Boolean(game.stalemate),canPass:canPassSequenceTurn(game,seat),canRefill:canReplenishSequenceHand(game,seat)};
   if(game.kind==='rack') return {...shared,step:game.step,turn:game.turn,held:game.active===seat?game.held:null,
     draw:{length:game.draw.length},discard:game.discard.slice(-1)};
   return {...shared,round:game.round,step:game.step,draw:{length:game.draw.length},
@@ -316,6 +316,12 @@ export class RoomStore {
         case 'sequence-play':
           if(game.kind!=='sequence'||!['stock','hand','discard'].includes(action.sourceType)||!restrictedIndex(action.sourceIndex,100)||!restrictedIndex(action.pileIndex,3))throw Error('Invalid card action.');
           outcome=playSequenceCard(game,action.sourceType,action.sourceIndex,action.pileIndex);break;
+        case 'sequence-refill':
+          if(game.kind!=='sequence')throw Error('Invalid sequence turn action.');
+          outcome=replenishSequenceHand(game);break;
+        case 'sequence-pass':
+          if(game.kind!=='sequence')throw Error('Invalid sequence turn action.');
+          outcome=passSequenceTurn(game);break;
         case 'sequence-discard':
           if(game.kind!=='sequence'||!restrictedIndex(action.handIndex,100)||!restrictedIndex(action.discardIndex,3))throw Error('Invalid discard action.');
           outcome=discardSequenceCard(game,action.handIndex,action.discardIndex);break;

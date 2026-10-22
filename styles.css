@@ -222,3 +222,15 @@
   .game-heading-actions .btn{padding-inline:10px;min-height:44px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.game-tile:hover,.btn:not(:disabled):hover{transform:none}}
+
+/* Phase 16: narrow-screen reflow and keyboard navigation fixes. */
+html,body,.site-wrap{max-width:100%;min-width:0;}
+.hero-content,.hero-buttons,.site-header,.top-actions,.game-page,.room-page,.table-panel{min-width:0;}
+@media(max-width:420px){
+ .site-header{flex-wrap:wrap;min-height:70px;height:auto;gap:6px}
+ .top-actions{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+ .hero-buttons{flex-wrap:wrap}
+ .hero-buttons .btn{min-width:0;max-width:100%;flex:1 1 150px}
+ .game-tile{grid-template-columns:minmax(86px,32%) minmax(0,1fr)}
+ .game-heading h1,.hero h1{overflow-wrap:anywhere}
+}

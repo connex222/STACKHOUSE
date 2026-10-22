@@ -27,7 +27,7 @@ for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo
  sources.push(`// ${file}\n${code}`);
 }
 const js=`(()=>{\nconst OFFLINE_AVATARS=${JSON.stringify(avatars)};\nconst OFFLINE_LOGO=${JSON.stringify(logo)};\n${sources.join('\n\n')}\n})();`;
-const html=`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#071d20"><title>Stackhouse Social — Ten games offline</title><style>${css}</style></head><body><div id="app" aria-live="polite"></div><script>${js}</script></body></html>`;
+const html=`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#071d20"><title>Stackhouse Social — Ten games offline</title><style>${css}</style></head><body><div id="app"></div><div id="stackhouse-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div><script>${js}</script></body></html>`;
 if(html.includes('src="/assets/avatar') || html.includes('src="/assets/logo'))throw Error('Offline assets were not embedded.');
 await writeFile(resolve(root,'PLAY-OFFLINE.html'),html);
 console.log(`Standalone resumable bot edition built (${Math.round(html.length/1024)} KiB).`);
