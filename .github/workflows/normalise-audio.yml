@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - scripts/normalise-audio.mjs
+      - .github/workflows/normalise-audio.yml
   workflow_dispatch:
 permissions:
   contents: write
@@ -16,8 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check sound-processing dependencies
-        run: ffmpeg -version
+      - name: Install sound-processing dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
       - name: Normalise published game cues (keep all provider masters untouched)
         run: node scripts/normalise-audio.mjs
       - name: Verify corrected asset levels
