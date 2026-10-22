@@ -10,7 +10,7 @@ import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eigh
 import {createSeries,ensureSeries,recordMatchResult,beginNextGame,publicSeries} from './series.js';
 import {tournamentFormat} from './tournament.js';
 
-const GROUP_MODES = new Set(['eight-shift','stack-run','malice-duel','tile-royale']);
+const GROUP_MODES = new Set(['eight-shift','stack-run','malice-duel','tile-royale','phase-quest','contract-club','crown-circuit','shanghai-nights']);
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
 const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -172,7 +172,7 @@ export class RoomStore {
     if(!MODES.has(mode)) throw Error('Choose one of the available games.');
     format=tournamentFormat(format);
     if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>6)throw Error('Choose between 2 and 6 players.');
-    if(maxPlayers>2&&(!GROUP_MODES.has(mode)||format!=='single'))throw Error('Group tables support Eight Shift, Stack Run, Malice Duel and Tile Royale in single-game mode.');
+    if(maxPlayers>2&&(!GROUP_MODES.has(mode)||format!=='single'))throw Error('Group tables support eight selected games in single-game mode; Games Night Mix is for two players.');
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
@@ -186,7 +186,7 @@ export class RoomStore {
     if(mode==='eight-shift')return createEightGame({mode,seed,playerCount});
     if(mode==='stack-run'||mode==='malice-duel')return createSequenceGame({mode,seed,playerCount});
     if(mode==='number-ladder')return createRackGame({mode,seed});
-    return createContractGame({mode,seed});
+    return createContractGame({mode,seed,playerCount});
   }
   // Called only while a room is waiting. Host can launch a group early once 3 seats are filled.
   _beginRoom(room) {

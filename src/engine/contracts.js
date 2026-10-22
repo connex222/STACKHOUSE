@@ -100,11 +100,12 @@ export function findContract(hand,mission) {
   }
   return match(hand,0,[]);
 }
-export function createContractGame({ mode='phase-quest',seed=42 }={}) {
+export function createContractGame({ mode='phase-quest',seed=42,playerCount=2 }={}) {
+  if(!Number.isInteger(playerCount)||playerCount<2||playerCount>6)throw Error('Contract tables support 2–6 players.');
   if(!MISSION_SETS[mode]) throw new Error(`Unknown contract mode: ${mode}`);
   const state = {
     kind:'contract',mode,seed,round:1,active:0,step:'draw',
-    players:[{name:'You',mission:0,score:0,hand:[]},{name:'House Bot',mission:0,score:0,hand:[]}],
+    players:Array.from({length:playerCount},(_,i)=>({name:i===0?'You':i===1?'House Bot':`Player ${i+1}`,mission:0,score:0,hand:[]})),
     draw:[],discard:[],laid:[],roundWinner:null,winner:null,
     log:[`Welcome to ${mode==='phase-quest'?'Phase Quest':mode==='crown-circuit'?'Crown Circuit':mode==='shanghai-nights'?'Shanghai Nights':'Contract Club'}. Complete your contract before the bot.`]
   };
@@ -117,7 +118,7 @@ function dealRound(state) {
   for(const player of state.players) player.hand=state.draw.splice(-10);
   state.discard.push(state.draw.pop());
   state.step='draw';state.roundWinner=null;
-  state.active=(state.round+1)%2;
+  state.active=(state.round-1)%state.players.length;
   return state;
 }
 export function currentMission(state,playerIndex=state.active) {
@@ -130,7 +131,7 @@ export function drawContractCard(input,from='deck') {
   if(!['deck','discard'].includes(from)) return {error:'Unknown draw source.'};
   if(from==='deck' && !state.draw.length && state.discard.length>1) {
     const top=state.discard.pop();
-    state.draw=shuffle(state.discard,mulberry32(state.seed^state.round^state.players[0].score^state.players[1].score));
+    state.draw=shuffle(state.discard,mulberry32(state.seed^state.round^state.players.reduce((sum,p)=>sum+p.score,0)));
     state.discard=[top];
   }
   const picked=from==='deck' ? state.draw.pop() : state.discard.pop();
@@ -148,7 +149,7 @@ export function discardContractCard(input,handIndex) {
   const [card]=player.hand.splice(handIndex,1);
   state.discard.push(card);
   state.log.unshift(`${player.name} discarded ${card.wild?'a wild':card.value}.`);
-  state.active=1-state.active;
+  state.active=(state.active+1)%state.players.length;
   state.step='draw';
   return {state};
 }
@@ -163,11 +164,16 @@ export function layContract(input) {
   player.hand=player.hand.filter(c=>!ids.has(c.id));
   state.laid.push(...selected.flat());
   player.mission+=1;
-  const loser=state.players[1-state.active];
-  const penalty=loser.hand.reduce((sum,c)=>sum+(c.wild?20:c.value),0);
-  loser.score+=penalty;
+  // Every rival receives the value of their *own* unplayed cards.
+  // Mission progression is individual; only the player who lays advances.
+  const penalties=state.players.flatMap((rival,i)=>{
+    if(i===state.active)return [];
+    const penalty=rival.hand.reduce((sum,c)=>sum+(c.wild?20:c.value),0);
+    rival.score+=penalty;
+    return [{name:rival.name,penalty}];
+  });
   state.roundWinner=state.active;
-  state.log.unshift(`${player.name} completed “${mission.title}”! Opponent receives ${penalty} penalty points.`);
+  state.log.unshift(`${player.name} completed “${mission.title}”! ${penalties.map(p=>`${p.name}: +${p.penalty}`).join(' · ')} penalty points.`);
   if(player.mission>=MISSION_SETS[state.mode].length) {
     state.winner=state.active;
     state.log.unshift(`${player.name} won the match!`);

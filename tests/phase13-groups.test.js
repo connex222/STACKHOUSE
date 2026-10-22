@@ -104,7 +104,7 @@ test('group room: rematch requires every seat, remains private and preserves ser
 test('group capacity and tournament constraints cannot be bypassed by HTTP payloads',async()=>{
  const store=new RoomStore();
  for(const n of [-1,1,2.5,7,100,'4',null])await assert.rejects(store.create({...player(0),mode:'eight-shift',maxPlayers:n}),/between 2 and 6/);
- for(const mode of ['phase-quest','low-glow','number-ladder','contract-club','crown-circuit','shanghai-nights']){
+ for(const mode of ['low-glow','number-ladder']){
   await assert.rejects(store.create({...player(0),mode,maxPlayers:3}),/Group tables support/);
  }
  await assert.rejects(store.create({...player(0),mode:'eight-shift',maxPlayers:3,format:'mixed'}),/Group tables support/);

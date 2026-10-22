@@ -1,6 +1,8 @@
+> **Latest release: v1.4.0 — Phase 14.** Eight of ten games now offer private 3–6-player tables. See [README_PHASE14.md](README_PHASE14.md) for rules, tests and limitations.
+
 # STACKHOUSE SOCIAL — Phase 13: Group Games Night (v1.3.0)
 
-**Four real multiplayer tables now support 2–6 people:** **Eight Shift, Stack Run, Malice Duel and Tile Royale**. The other six games remain head-to-head; a Games Night Mix rotation continues to require exactly two players. See [Phase 13 release notes](README_PHASE13.md) for verified coverage, limitations and testing.
+**Four real multiplayer tables now support 2–6 people:** **Eight Shift, Stack Run, Malice Duel, Tile Royale, Phase Quest, Contract Club, Crown Circuit and Shanghai Nights**. The other six games remain head-to-head; a Games Night Mix rotation continues to require exactly two players. See [Phase 13 release notes](README_PHASE13.md) for verified coverage, limitations and testing.
 
 - Host a room, select the supported table and seat capacity (2–6), then share the same invitation link with friends. For groups of 3–6, the host can start once at least three players are seated, or the game starts automatically when the table fills.
 - Each participant has private cards, an authenticated personal view, independent turn controls and an individual avatar. Turns cycle through all participants; a full-table rematch requires **everyone's consent**.
