@@ -4,6 +4,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -15,3 +16,30 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm test
       - run: npm run build
+
+  emulated-mobile-acceptance:
+    name: Two-phone and group browser simulation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm install --no-audit --no-fund
+      - run: python -m pip install 'playwright==1.56.0'
+      - run: python -m playwright install --with-deps chromium
+      - name: Start local multiplayer server
+        run: |
+          PORT=4173 node server.js > /tmp/stackhouse-browser-server.log 2>&1 &
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:4173/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/stackhouse-browser-server.log
+          exit 1
+      - name: Exercise independent mobile browsers
+        run: STACKHOUSE_URL=http://127.0.0.1:4173 python scripts/browser-acceptance.py
