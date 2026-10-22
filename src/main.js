@@ -31,8 +31,10 @@ const games = [
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const allowedBotLevels=['easy','standard','expert'];
 const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
+const storedSoundVolume=Number(localStorage.getItem('stackhouse.soundVolume') ?? 85);
+const initialSoundVolume=Number.isFinite(storedSoundVolume)?Math.max(0,Math.min(100,storedSoundVolume)):85;
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')!=='false',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
+  soundOn:localStorage.getItem('stackhouse.sound')!=='false',soundVolume:initialSoundVolume,soundStatus:'Press Test to check audio.',soundTestPending:false,ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
 function savedSolo(){try{return decodeSoloSave(localStorage.getItem(SOLO_SAVE_KEY));}catch{return null;}}
@@ -89,7 +91,22 @@ const asset=id=>avatars.find(a=>a.id===id)||avatars[0];
 const gameInfo=()=>games.find(g=>g.id===ui.mode)||games[0];
 const escapeHtml=(s)=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const cls=(...names)=>names.filter(Boolean).join(' ');
-const sampleAudio=createGameAudio({onPlaybackError(type){playFallbackSound(type);}});
+function setSoundStatus(message){
+ ui.soundStatus=message;
+ const label=document.getElementById('sound-status');if(label)label.textContent=message;
+}
+const sampleAudio=createGameAudio({volume:ui.soundVolume,
+ onPlaybackSuccess(type){if(type==='win'&&ui.soundTestPending){ui.soundTestPending=false;setSoundStatus('Test sound played. Adjust device media volume if it is still silent.');}},
+ onPlaybackError(type,error){
+  const fallback=playFallbackSound(type);
+  if(type==='win'&&ui.soundTestPending){
+   ui.soundTestPending=false;
+   setSoundStatus(error?.name==='NotAllowedError'
+    ?'Browser blocked sound. Tap Test once more to unlock playback.'
+    :fallback?'Sample unavailable; backup tone attempted.':'Audio unavailable in this browser.');
+  }
+ }
+});
 let audioContext;
 let ambienceVoices=[];
 let ambienceGain=null;
@@ -107,9 +124,9 @@ function sound(type='tap',force=false) {
  playFallbackSound(type);
 }
 function playFallbackSound(type='tap') {
- if(!ui.soundOn)return;
+ if(!ui.soundOn||ui.soundVolume===0)return false;
  try {
-  const ctx=contextForAudio();if(!ctx)return;
+  const ctx=contextForAudio();if(!ctx)return false;
   const notes={tap:[392],select:[523],card:[330,495],deal:[262,392,523],draw:[294,440],
    sort:[440,554],clear:[523,659,880],round:[440,554,659],success:[523,659,784,1047],
    win:[392,523,659,784,1047],lose:[294,262,220],error:[220,175]};
@@ -120,11 +137,12 @@ function playFallbackSound(type='tap') {
    oscillator.frequency.setValueAtTime(freq,t);
    if(type==='card'||type==='draw'||type==='deal')oscillator.frequency.exponentialRampToValueAtTime(freq*.91,t+.09);
    gain.gain.setValueAtTime(.0001,t);
-   gain.gain.exponentialRampToValueAtTime(type==='win'?.038:.025,t+.012);
+   gain.gain.exponentialRampToValueAtTime((type==='win'?.038:.025)*(ui.soundVolume/85),t+.012);
    gain.gain.exponentialRampToValueAtTime(.0001,t+.17);
    oscillator.connect(gain).connect(ctx.destination);oscillator.start(t);oscillator.stop(t+.19);
   });
- }catch{/* Mute gracefully when audio devices or browser audio are unavailable. */}
+  return true;
+ }catch{return false;}
 }
 function syncAmbience(){
  const playing=ui.ambienceOn&&ui.screen==='game'&&!(typeof document.hidden==='boolean'&&document.hidden);
@@ -191,6 +209,8 @@ function header() {
       <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
       <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
       <button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a sample sound">${icon('play',14)} Test</button>
+      <label class="sound-volume-control" for="sound-volume">Volume <input id="sound-volume" aria-label="Game sound volume" type="range" min="0" max="100" step="5" value="${ui.soundVolume}"></label>
+      <output id="sound-status" class="sound-status" role="status" aria-live="polite">${escapeHtml(ui.soundStatus)}</output>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
     </nav></header>`;
 }
@@ -516,7 +536,7 @@ function render(){
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content</a>${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 17</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 19</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
  if(backdrop)backdrop.inert=Boolean(ui.modal);
@@ -858,8 +878,8 @@ app.addEventListener('click',event=>{
      case 'avatars':ui.modal='avatars';sound();render();break;
      case 'rules':ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
-     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn)sound('win',true);render();break;
-     case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}sound('win',true);render();break;
+     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn){contextForAudio();ui.soundStatus='Sound enabled. Press Test to check playback.';}else{ui.soundTestPending=false;ui.soundStatus='Sound muted.';}render();break;
+     case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}contextForAudio();sampleAudio.resetFailures();ui.soundTestPending=true;ui.soundStatus=ui.soundVolume===0?'Volume is zero. Raise the slider to hear sound.':'Testing sound…';if(ui.soundVolume>0){if(!sampleAudio.play('win',{force:true})){ui.soundTestPending=false;ui.soundStatus=playFallbackSound('win')?'Playing backup tone.':'No audio device detected.';}}render();break;
      case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;
@@ -933,8 +953,15 @@ window.addEventListener?.('pagehide',()=>{ambienceVoices.forEach(v=>{try{v.stop(
 render();
 restoreRoom();
 
+app.addEventListener('input',event=>{
+ if(event.target?.id!=='sound-volume')return;
+ ui.soundVolume=Math.max(0,Math.min(100,Number(event.target.value)||0));
+ sampleAudio.setVolume(ui.soundVolume);
+ try{localStorage.setItem('stackhouse.soundVolume',String(ui.soundVolume));}catch{}
+ setSoundStatus(ui.soundVolume===0?'Volume is zero. Move the slider up and press Test.':`Volume ${ui.soundVolume}%. Press Test to check audio.`);
+});
 app.addEventListener('change',event=>{
- if(event.target?.id==='bot-level'&&allowedBotLevels.includes(event.target.value)){
+ if(event.target?.id==='bot-level' &&allowedBotLevels.includes(event.target.value)){
   ui.botDifficulty=event.target.value;
   try{localStorage.setItem('stackhouse.botDifficulty',ui.botDifficulty);}catch{}
   toast(`House Bot difficulty: ${ui.botDifficulty}. Available on six tables.`);

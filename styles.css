@@ -248,3 +248,10 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
 .sound-test-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:42px;min-width:58px;padding:0 9px;border:1px solid rgba(244,207,141,.6);background:rgba(234,183,89,.13);color:#ffdf93;border-radius:11px;font-size:11px;font-weight:800;white-space:nowrap}
 .sound-test-btn:hover,.sound-test-btn:focus-visible{background:rgba(234,183,89,.25)}
 @media(max-width:600px){.site-header .top-actions{flex-wrap:wrap;justify-content:flex-end;gap:5px}.sound-toggle{min-width:82px;padding:0 6px;font-size:10px}.sound-test-btn{min-width:54px;padding:0 7px}}
+/* Phase 19: independently controllable audible cues and honest playback diagnostics. */
+.sound-volume-control{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;color:#f7d89c;font-size:11px;font-weight:700;min-height:42px}
+.sound-volume-control input{width:90px;min-height:30px;accent-color:#f5c576;cursor:pointer}
+.sound-volume-control input:focus-visible{outline:3px solid #f6deaa;outline-offset:3px;border-radius:4px}
+.sound-status{flex-basis:100%;order:12;text-align:right;color:#d9e6df;font-size:11px;line-height:1.4;min-height:16px}
+@media(max-width:680px){.sound-volume-control{gap:5px;font-size:10px}.sound-volume-control input{width:72px}.sound-status{font-size:10px}}
+@media(max-width:370px){.sound-volume-control input{width:62px}}

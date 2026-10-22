@@ -1,6 +1,6 @@
 # STACKHOUSE SOCIAL
 
-**Current source version: v1.8.0 (Phase 18).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
+**Current source version: v1.9.0 (Phase 19).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
 
 [Play the live game](https://stackhouse-m50w.onrender.com) · [GitHub repository](https://github.com/connex222/STACKHOUSE)
 
@@ -45,6 +45,7 @@ npm start
 
 - [Release acceptance and testing](#release-validation)
 - [Phase 18 — Professional sound design](#phase-18)
+- [Phase 19 — Reliable playback and sound controls](#phase-19)
 - [Phase 17 — Accessibility and release readiness](#phase-17)
 - [Phase 16 — Rules and accessibility corrections](#phase-16)
 - [Phase 15 — Release audit](#phase-15)
@@ -616,3 +617,18 @@ See [Phase 18 notes](#phase-18) for the sound bank, Sonilo/Mirelo production pro
 ## Audio playback hotfix — 22 October 2026
 
 A production defect made the web server reject `.mp3` requests with HTTP 403 even though game logic correctly requested the packaged sounds. The static asset allow-list now admits `.mp3` and `.m4a`, served as `audio/mpeg` and `audio/mp4`. Audio playback failures are reported to the existing procedural tone fallback rather than silently swallowed. Gameplay audio now defaults to on for first-time visitors, but preserves a returning player's explicit mute preference; browser autoplay restrictions still require a click or other user interaction. The header displays **Sound on/off** and offers a **Test** button, which enables audio and plays a sample. Sound samples are intentionally short and at moderate volume. Existing generated Sonilo and Mirelo masters remain untouched.
+
+
+## Phase 19
+
+**Audio reliability update (v1.9.0)**
+
+- A **Volume** slider in the header adjusts the sound-effects level from 0 to 100%, defaults to 85%, and remembers the setting on that device. Ambience remains independently controlled.
+- The **Test** button explicitly enables sound and asks the browser to play a victory sample. A status line reports whether the browser accepted playback, blocked it, or required the backup synthesised tone. Browser playback confirmation does not verify speaker output or the physical phone's silent/media-volume settings.
+- The mobile audio engine no longer permanently blacklists a sample after a temporary `NotAllowedError` (autoplay policy). Further user taps can retry. Unreadable media still uses the fallback rather than interrupting gameplay.
+- The test button resets cached media failures so transient download or device errors can be retried; the regular game cues retain throttling and respect mute and volume zero.
+- `tests/phase19-audio-recovery.test.js` covers permission locks, decoder failures, zero/maximum volume, user controls, and replay. `scripts/audio-browser-smoke.py` checks a direct Chromium user gesture, volume, mute and playback promise or backup tone.
+- GitHub's accessibility workflow also runs the audio smoke test. Real iPhone and Android physical-speaker listening remains required before a full audio sign-off.
+- The existing Sonilo and Mirelo recordings in `assets/audio/masters/` and the three shortened production cues are preserved. This phase does not replace or claim to remix provider recordings.
+
+If the sound-status line says **Test sound played** but you still hear nothing, check the device's *media volume*, Bluetooth/HDMI audio output selection, and the physical mute/silent switch. A successful play promise confirms browser playback started, not that speakers emitted audible sound.

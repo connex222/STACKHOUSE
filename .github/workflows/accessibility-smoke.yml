@@ -22,3 +22,4 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/accessibility-smoke.py
       - run: python scripts/reflow-smoke.py
+      - run: python scripts/audio-browser-smoke.py
