@@ -1,42 +1,23 @@
-name: Import Sonilo and Mirelo produced audio
+name: Verify imported Sonilo and Mirelo audio
 on:
-  push:
-    paths:
-      - README_PHASE18.md
-      - .github/workflows/import-produced-audio.yml
+  workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
-  import-audio:
+  verify-audio:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch produced master recordings
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify imported audio assets
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p assets/audio/masters
-          curl -fSL --retry 3 'https://mirelo.ai/dl/qx71s9w70gd7ek9h4wqbv2pc3d8grjmm/0?k=zTTg6_5lRs55W4y9' -o assets/audio/masters/mirelo-card.mp3
-          curl -fSL --retry 3 'https://mirelo.ai/dl/qx72d5998bf48jdg7nhxkzksp98grkfy/0?k=Y0PC0-t3BS6BIHpf' -o assets/audio/masters/mirelo-tile.mp3
-          curl -fSL --retry 3 'https://mirelo.ai/dl/qx727s6why2xvct08p1cnsaa718graen/0?k=8eeMucQY332nV-FU' -o assets/audio/masters/mirelo-victory.mp3
-          curl -fSL --retry 3 'https://api.sonilo.com/files/c2Z4LXJlc3VsdHMvN2E2OTJlZmEtZDE0ZS00MmE4LTlkM2YtMTkxYjEwNWQyOWVmL2F1ZGlvLm00YQ.7_4su6x2ZI3u-meePnjyMQ9Vdd3_iVt8UXZci05fO4c/audio.m4a' -o assets/audio/masters/sonilo-table-foley.m4a
-          curl -fSL --retry 3 'https://api.sonilo.com/files/c2Z4LXJlc3VsdHMvYzVmYzdkNjItZTVhMi00NDEyLWFlYzQtODlmMmE3MDJlMTVlL2F1ZGlvLm00YQ.EEakkRul9fZ820gz9Fq3eu_wjRp71qVnKCN80jXUHQ4/audio.m4a' -o assets/audio/masters/sonilo-ui-rewards.m4a
-      - name: Install audio tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-      - name: Render clean Mirelo sound events
-        run: |
-          set -euo pipefail
-          ffmpeg -hide_banner -loglevel error -y -i assets/audio/masters/mirelo-card.mp3 -af 'afade=t=out:st=1.1:d=0.2,volume=0.75' -t 1.3 -codec:a libmp3lame -q:a 5 assets/audio/card-place.mp3
-          ffmpeg -hide_banner -loglevel error -y -i assets/audio/masters/mirelo-tile.mp3 -af 'afade=t=out:st=1.3:d=0.2,volume=0.75' -t 1.5 -codec:a libmp3lame -q:a 5 assets/audio/tile-place.mp3
-          ffmpeg -hide_banner -loglevel error -y -i assets/audio/masters/mirelo-victory.mp3 -af 'volume=0.75' -codec:a libmp3lame -q:a 5 assets/audio/victory.mp3
-      - name: Verify generated files
-        run: |
-          for file in assets/audio/masters/* assets/audio/{card-place,tile-place,victory}.mp3; do test -s "$file"; ffprobe -v error "$file" >/dev/null; done
-          npm run build
+          for cue in card-place tile-place victory; do test -s "assets/audio/${cue}.mp3"; done
+          test -d assets/audio/masters
+          test "$(find assets/audio/masters -maxdepth 1 -type f | wc -l)" -ge 5
+          npm install
           npm test
-      - name: Commit generated recordings
-        run: |
-          git config user.name 'stackhouse-audio-bot'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add assets/audio
-          if ! git diff --cached --quiet; then git commit -m 'Import generated Sonilo and Mirelo recordings into Stackhouse'; git push; fi
+          npm run build
