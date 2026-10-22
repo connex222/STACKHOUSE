@@ -1,0 +1,15 @@
+{
+  "name": "stackhouse-social",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Stackhouse Social: private server-authoritative two-player games and ten original card-table variants",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node --test",
+    "build": "node scripts/build.js",
+    "build:offline": "node scripts/build-offline.js"
+  },
+  "engines": { "node": ">=20" }
+}

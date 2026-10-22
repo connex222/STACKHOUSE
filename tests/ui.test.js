@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+test('front-end renders branded lobby, private room form and bot gameplay in a DOM smoke harness',async()=>{
+  const listeners=[];
+  const app={innerHTML:'',addEventListener:(type,fn,capture)=>listeners.push({type,fn,capture:!!capture})};
+  const memory=new Map();
+  globalThis.localStorage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,String(v)),removeItem:k=>memory.delete(k)};
+  globalThis.document={getElementById:id=>id==='app'?app:null};
+  globalThis.location=new URL('http://localhost:4173/');
+  globalThis.history={replaceState:()=>{}};
+  globalThis.window={addEventListener:()=>{},scrollTo:()=>{}};
+  const initial=globalThis.fetch;
+  await import('../src/main.js');
+  assert.match(app.innerHTML,/Good cards/);
+  assert.match(app.innerHTML,/Private table/);
+  assert.match(app.innerHTML,/16/);
+  const click=(action,extra={})=>{
+    const control={dataset:{action,...extra}};
+    const event={target:{closest:()=>control},stopImmediatePropagation(){this.stopped=true;}};
+    for(const entry of listeners.filter(x=>x.type==='click'&&x.capture))entry.fn(event);
+    if(!event.stopped)for(const entry of listeners.filter(x=>x.type==='click'&&!x.capture))entry.fn(event);
+  };
+  click('room-open',{mode:'phase-quest'});
+  assert.match(app.innerHTML,/Host a private table/);
+  assert.match(app.innerHTML,/Phase Quest/);
+  click('room-switch');assert.match(app.innerHTML,/Join a friend/);
+  click('home');assert.match(app.innerHTML,/Good cards/);
+  click('start',{mode:'stack-run'});
+  assert.match(app.innerHTML,/SHARED BUILDING STACKS/);
+  click('home');click('start',{mode:'phase-quest'});
+  assert.match(app.innerHTML,/CURRENT CONTRACT/);
+  click('home');click('start',{mode:'crown-circuit'});assert.match(app.innerHTML,/Crown Circuit/);
+  click('home');click('start',{mode:'shanghai-nights'});assert.match(app.innerHTML,/Shanghai Nights/);
+  click('home');click('start',{mode:'number-ladder'});assert.match(app.innerHTML,/YOUR TEN SLOTS/);
+  click('rack-draw',{from:'deck'});assert.match(app.innerHTML,/DRAWN CARD/);
+  click('rack-replace',{index:'0'});assert.match(app.innerHTML,/YOUR TEN SLOTS/);
+  click('home');click('start',{mode:'tile-royale'});assert.match(app.innerHTML,/YOUR TILE RACK/);
+  click('tile-end',{draw:'true'});assert.match(app.innerHTML,/YOUR TILE RACK/);
+  click('home');click('start',{mode:'low-glow'});assert.match(app.innerHTML,/YOUR 3 × 4 GRID/);
+  click('low-draw',{from:'deck'});assert.match(app.innerHTML,/HELD CARD/);
+  click('low-slot',{index:'1'});assert.match(app.innerHTML,/ROUND 1/);
+  click('home');click('start',{mode:'eight-shift'});assert.match(app.innerHTML,/ACTIVE SUIT/);
+  click('eight-draw');assert.match(app.innerHTML,/Drawn this turn/);
+  assert.equal(globalThis.fetch,initial);
+});

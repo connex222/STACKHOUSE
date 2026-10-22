@@ -1,0 +1,206 @@
+import { mulberry32, shuffle } from '../rng.js';
+
+export const MISSION_SETS = {
+  'phase-quest': [
+    {title:'Opening Gambit', groups:[['set',3],['run',3]]},
+    {title:'Double Trouble',groups:[['set',3],['set',3]]},
+    {title:'The Long Run',groups:[['run',6]]},
+    {title:'Four of a Kind',groups:[['set',4],['colour',2]]},
+    {title:'Lucky Seven',groups:[['run',7]]},
+    {title:'Colour Theory',groups:[['colour',4],['set',3]]},
+    {title:'Two Ways Up',groups:[['run',4],['run',4]]},
+    {title:'High Five',groups:[['set',5]]},
+    {title:'The Great Eight',groups:[['run',8]]},
+    {title:'Final Flourish',groups:[['set',4],['run',5]]}
+  ],
+  'crown-circuit': [
+    {title:'First Crown',groups:[['set',3]]},
+    {title:'Royal Run',groups:[['run',3]]},
+    {title:'Two Tribes',groups:[['set',3],['set',3]]},
+    {title:'Five in Line',groups:[['run',5]]},
+    {title:'One Colour',groups:[['colour',6]]},
+    {title:'Grand Pairs',groups:[['set',4],['set',3]]},
+    {title:'Seven Up',groups:[['run',7]]},
+    {title:'Mix and Match',groups:[['set',3],['run',4]]},
+    {title:'Eight Is Great',groups:[['run',8]]},
+    {title:'Grand Court',groups:[['set',4],['run',5]]},
+    {title:'Final Crown',groups:[['set',5],['run',5]]}
+  ],
+  'shanghai-nights': [
+    {title:'Opening Pair',groups:[['set',3],['set',3]]},
+    {title:'Three and Four',groups:[['set',3],['run',4]]},
+    {title:'Seven Steps',groups:[['run',7]]},
+    {title:'Double Colour',groups:[['colour',4],['set',3]]},
+    {title:'Eight Steps',groups:[['run',8]]},
+    {title:'Five and Four',groups:[['set',4],['run',5]]},
+    {title:'Shanghai Finale',groups:[['set',3],['run',7]]}
+  ],
+  'contract-club': [
+    {title:'First Deal',groups:[['set',3]]},
+    {title:'Pairs of Three',groups:[['set',3],['set',3]]},
+    {title:'On the Run',groups:[['run',5]]},
+    {title:'Colour Collective',groups:[['colour',6]]},
+    {title:'Triple and Trail',groups:[['set',3],['run',4]]},
+    {title:'The Big Run',groups:[['run',7]]},
+    {title:'Grand Contract',groups:[['set',4],['run',5]]}
+  ]
+};
+const COLOURS = ['coral','gold','teal','violet'];
+const clone = state => structuredClone(state);
+const groupName = kind => ({set:'of a kind',run:'card run',colour:'of one colour'})[kind];
+export function missionDescription(mission) {
+  if (!mission) return 'All contracts completed';
+  return mission.groups.map(([kind,count])=> `${count} ${groupName(kind)}`).join(' + ');
+}
+export function buildContractDeck(seed,mode='phase-quest',round=1) {
+  let id = 0;
+  const cards = [];
+  const crown=mode==='crown-circuit';
+  const colours=crown?['stars','moons','waves','flames','leaves']:COLOURS;
+  for (let copies = 0; copies < 2; copies++) {
+    for (const colour of colours) {
+      for (let value = crown?3:1; value <= (crown?13:12); value++) cards.push({id:`c${++id}`,value,colour,wild:crown&&value===Math.min(13,round+2)});
+    }
+  }
+  for (let i=0;i<(crown?6:12);i++) cards.push({id:`c${++id}`,value:0,colour:'wild',wild:true});
+  return shuffle(cards,mulberry32(seed));
+}
+export function validGroup(cards, kind, count) {
+  if (cards.length !== count || !cards.length) return false;
+  const fixed=cards.filter(c=>!c.wild);
+  if (kind === 'set') return fixed.every(c => c.value === fixed[0].value);
+  if (kind === 'colour') return fixed.every(c=>c.colour===fixed[0].colour);
+  if (kind === 'run') {
+    const values=fixed.map(c=>c.value);
+    if(new Set(values).size!==values.length) return false;
+    return Array.from({length:14-count},(_,i)=>i+1).some(start=>values.every(v=>v>=start && v<start+count));
+  }
+  return false;
+}
+function choose(cards,count,offset=0,acc=[],out=[]) {
+  if(acc.length===count){out.push([...acc]);return out;}
+  for(let i=offset;i<=cards.length-(count-acc.length);i++) {
+    acc.push(cards[i]);choose(cards,count,i+1,acc,out);acc.pop();
+  }
+  return out;
+}
+/** Find the exact cards for a contract without reusing a card across groups. */
+export function findContract(hand,mission) {
+  if(!mission || mission.groups.reduce((n,g)=>n+g[1],0)>hand.length) return null;
+  function match(remaining,groupIndex,chosen) {
+    if(groupIndex===mission.groups.length) return chosen;
+    const [kind,count]=mission.groups[groupIndex];
+    for(const group of choose(remaining,count)) {
+      if(!validGroup(group,kind,count)) continue;
+      const ids=new Set(group.map(c=>c.id));
+      const result=match(remaining.filter(c=>!ids.has(c.id)),groupIndex+1,[...chosen,group]);
+      if(result) return result;
+    }
+    return null;
+  }
+  return match(hand,0,[]);
+}
+export function createContractGame({ mode='phase-quest',seed=42 }={}) {
+  if(!MISSION_SETS[mode]) throw new Error(`Unknown contract mode: ${mode}`);
+  const state = {
+    kind:'contract',mode,seed,round:1,active:0,step:'draw',
+    players:[{name:'You',mission:0,score:0,hand:[]},{name:'House Bot',mission:0,score:0,hand:[]}],
+    draw:[],discard:[],laid:[],roundWinner:null,winner:null,
+    log:[`Welcome to ${mode==='phase-quest'?'Phase Quest':mode==='crown-circuit'?'Crown Circuit':mode==='shanghai-nights'?'Shanghai Nights':'Contract Club'}. Complete your contract before the bot.`]
+  };
+  return dealRound(state);
+}
+function dealRound(state) {
+  state.draw=buildContractDeck((state.seed+Math.imul(state.round,0x9e3779b9))>>>0,state.mode,state.round);
+  state.discard=[];
+  state.laid=[];
+  for(const player of state.players) player.hand=state.draw.splice(-10);
+  state.discard.push(state.draw.pop());
+  state.step='draw';state.roundWinner=null;
+  state.active=(state.round+1)%2;
+  return state;
+}
+export function currentMission(state,playerIndex=state.active) {
+  return MISSION_SETS[state.mode][state.players[playerIndex].mission] ?? null;
+}
+export function drawContractCard(input,from='deck') {
+  const state=clone(input);
+  if(state.winner!==null || state.roundWinner!==null) return {error:'Finish this round first.'};
+  if(state.step!=='draw') return {error:'Discard or lay your contract before drawing again.'};
+  if(!['deck','discard'].includes(from)) return {error:'Unknown draw source.'};
+  if(from==='deck' && !state.draw.length && state.discard.length>1) {
+    const top=state.discard.pop();
+    state.draw=shuffle(state.discard,mulberry32(state.seed^state.round^state.players[0].score^state.players[1].score));
+    state.discard=[top];
+  }
+  const picked=from==='deck' ? state.draw.pop() : state.discard.pop();
+  if(!picked) return {error:'No cards available from that pile.'};
+  state.players[state.active].hand.push(picked);
+  state.step='play';
+  state.log.unshift(`${state.players[state.active].name} drew from ${from==='deck'?'the deck':'the discard pile'}.`);
+  return {state};
+}
+export function discardContractCard(input,handIndex) {
+  const state=clone(input);
+  if(state.winner!==null || state.roundWinner!==null || state.step!=='play') return {error:'Draw a card first.'};
+  const player=state.players[state.active];
+  if(!Number.isInteger(handIndex) || handIndex<0 || handIndex>=player.hand.length) return {error:'Choose a card to discard.'};
+  const [card]=player.hand.splice(handIndex,1);
+  state.discard.push(card);
+  state.log.unshift(`${player.name} discarded ${card.wild?'a wild':card.value}.`);
+  state.active=1-state.active;
+  state.step='draw';
+  return {state};
+}
+export function layContract(input) {
+  const state=clone(input);
+  if(state.winner!==null || state.roundWinner!==null || state.step!=='play') return {error:'Draw before laying your contract.'};
+  const player=state.players[state.active];
+  const mission=currentMission(state);
+  const selected=findContract(player.hand,mission);
+  if(!selected) return {error:'Your hand does not yet contain the required sets or runs.'};
+  const ids=new Set(selected.flat().map(c=>c.id));
+  player.hand=player.hand.filter(c=>!ids.has(c.id));
+  state.laid.push(...selected.flat());
+  player.mission+=1;
+  const loser=state.players[1-state.active];
+  const penalty=loser.hand.reduce((sum,c)=>sum+(c.wild?20:c.value),0);
+  loser.score+=penalty;
+  state.roundWinner=state.active;
+  state.log.unshift(`${player.name} completed “${mission.title}”! Opponent receives ${penalty} penalty points.`);
+  if(player.mission>=MISSION_SETS[state.mode].length) {
+    state.winner=state.active;
+    state.log.unshift(`${player.name} won the match!`);
+  }
+  return {state};
+}
+export function nextContractRound(input) {
+  const state=clone(input);
+  if(state.roundWinner===null || state.winner!==null) return {error:'Cannot start the next round yet.'};
+  state.round+=1;
+  state.log.unshift(`Round ${state.round} started.`);
+  return {state:dealRound(state)};
+}
+export function runContractBot(input) {
+  let state=clone(input);
+  if(state.active!==1 || state.roundWinner!==null || state.winner!==null) return state;
+  const mission=currentMission(state,1);
+  const top=state.discard.at(-1);
+  const possibleWithDiscard=top && findContract([...state.players[1].hand,top],mission);
+  let result=drawContractCard(state,possibleWithDiscard?'discard':'deck');
+  if(result.error) return state;
+  state=result.state;
+  result=layContract(state);
+  if(!result.error) return result.state;
+  const hand=state.players[1].hand;
+  // Prefer preserving wilds, pairs, and close runs. Ties are deterministic.
+  const scores=hand.map(c=> {
+    if(c.wild)return 10000;
+    const near=hand.filter(x=>!x.wild && x!==c && Math.abs(x.value-c.value)<=2).length;
+    const same=hand.filter(x=>!x.wild && x!==c && x.value===c.value).length;
+    const colour=hand.filter(x=>!x.wild && x!==c && x.colour===c.colour).length;
+    return same*6+near*2+colour+(12-c.value)*0.1;
+  });
+  const worst=scores.indexOf(Math.min(...scores));
+  return discardContractCard(state,worst).state;
+}
