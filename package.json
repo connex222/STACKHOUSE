@@ -1,16 +1,17 @@
 {
   "name": "stackhouse-social",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Ten original card games, secure private tables for 2\u20136 players in eight games, original avatars and two-player Games Night Mix.",
+  "description": "Ten original card games, secure private tables for 2–6 players in eight games, original avatars and two-player Games Night Mix.",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
     "test": "node --test",
     "test:network": "node --test tests/phase12-network-acceptance.test.js",
     "build": "node scripts/build-offline.js && node scripts/build.js",
-    "build:offline": "node scripts/build-offline.js"
+    "build:offline": "node scripts/build-offline.js",
+    "audio:normalise": "node scripts/normalise-audio.mjs"
   },
   "engines": {
     "node": ">=20"

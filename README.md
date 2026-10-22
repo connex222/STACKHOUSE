@@ -1,6 +1,6 @@
 # STACKHOUSE SOCIAL
 
-**Current source version: v1.9.0 (Phase 19).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
+**Current source version: v2.0.0 (Phase 20).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
 
 [Play the live game](https://stackhouse-m50w.onrender.com) · [GitHub repository](https://github.com/connex222/STACKHOUSE)
 
@@ -632,3 +632,14 @@ A production defect made the web server reject `.mp3` requests with HTTP 403 eve
 - The existing Sonilo and Mirelo recordings in `assets/audio/masters/` and the three shortened production cues are preserved. This phase does not replace or claim to remix provider recordings.
 
 If the sound-status line says **Test sound played** but you still hear nothing, check the device's *media volume*, Bluetooth/HDMI audio output selection, and the physical mute/silent switch. A successful play promise confirms browser playback started, not that speakers emitted audible sound.
+
+
+## Phase 20 — Audible audio and diagnostic checks (v2.0.0)
+
+- **Measured sound levels:** The original shipped playable MP3s peaked between approximately -14.6 and -20.3 dBFS. This could make the card and button cues very quiet on a phone or television.
+- **Level correction:** `node scripts/normalise-audio.mjs` uses FFmpeg to lift quiet playable effects near -5 dBFS without exceeding the safe limiter ceiling. The generated providers’ **master recordings are never modified**. A GitHub workflow applies the same correction to the actual repository audio assets, including the imported Mirelo samples. This changes recorded gain, not your saved user volume.
+- **Two independent sound tests:** **Test** plays a recorded sample; **Tone** synthesises a deliberately audible diagnostic signal through Web Audio. If Tone works but Test does not, investigate the file/browser media path. If neither is heard, check device volume, speaker selection and browser audio permissions. A successful browser playback request is *not proof* that a physical loudspeaker is audible.
+- **Browser controls:** Sound may require a gesture after loading a page. Keep game effects enabled and volume above zero, then press Test or Tone. No sound is ever required to progress game state.
+- **Verification:** The normaliser includes post-processing measurements and is safe to run repeatedly. Audio regression tests and Chromium smoke tests cover distinct recorded/tone paths and volume changes.
+
+Outstanding: physical phone/TV speaker verification and permanent multiplayer storage.

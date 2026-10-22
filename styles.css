@@ -255,3 +255,7 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
 .sound-status{flex-basis:100%;order:12;text-align:right;color:#d9e6df;font-size:11px;line-height:1.4;min-height:16px}
 @media(max-width:680px){.sound-volume-control{gap:5px;font-size:10px}.sound-volume-control input{width:72px}.sound-status{font-size:10px}}
 @media(max-width:370px){.sound-volume-control input{width:62px}}
+/* Phase 20: a separate device-tone test, distinguishable from recorded samples. */
+.sound-tone-btn{background:rgba(65,166,152,.14);border-color:rgba(117,216,193,.6);color:#c1ffec;min-width:49px}
+.sound-tone-btn:hover,.sound-tone-btn:focus-visible{background:rgba(65,166,152,.28)}
+@media(max-width:680px){.sound-tone-btn{min-width:44px;padding:0 6px}}

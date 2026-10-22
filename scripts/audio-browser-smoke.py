@@ -33,11 +33,15 @@ with sync_playwright() as p:
     page.get_by_role('button',name='Play test sound').click()
     page.wait_for_function('document.getElementById("sound-status").textContent!=="Testing sound…"',timeout=9000)
     state=page.locator('#sound-status').inner_text()
-    assert 'Test sound played' in state or 'Playing backup tone' in state, f'Sound not confirmed: {state}'
+    assert 'Browser accepted the recorded sample.' in state or 'Playing backup tone' in state, f'Sound not confirmed: {state}'
+    page.get_by_role('button',name='Play diagnostic tone').click()
+    page.wait_for_timeout(350)
+    tone_state=page.locator('#sound-status').inner_text()
+    assert 'Tone sent to audio output' in tone_state or 'Unlocking audio' in tone_state, tone_state
     page.get_by_role('button',name='Turn off game sounds').click()
     assert page.locator('#sound-status').inner_text()=='Sound muted.'
     page.get_by_role('button',name='Turn on game sounds').click()
     assert page.locator('#sound-status').inner_text().startswith('Sound enabled.')
     assert not errors,errors
     browser.close()
-    print(json.dumps({'result':'PASS','checks':['test control','sound volume at zero','audible playback promise or fallback','mute','unmute','no JavaScript exceptions'],'finalStatus':state,'limitations':['Browser success does not confirm physical speaker volume','Not a real mobile device']}))
+    print(json.dumps({'result':'PASS','checks':['test control','sound volume at zero','audible playback promise or fallback','independent diagnostic tone','mute','unmute','no JavaScript exceptions'],'finalStatus':state,'toneStatus':tone_state,'limitations':['Browser success does not confirm physical speaker volume','Not a real mobile device']}))

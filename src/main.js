@@ -96,7 +96,7 @@ function setSoundStatus(message){
  const label=document.getElementById('sound-status');if(label)label.textContent=message;
 }
 const sampleAudio=createGameAudio({volume:ui.soundVolume,
- onPlaybackSuccess(type){if(type==='win'&&ui.soundTestPending){ui.soundTestPending=false;setSoundStatus('Test sound played. Adjust device media volume if it is still silent.');}},
+ onPlaybackSuccess(type){if(type==='win'&&ui.soundTestPending){ui.soundTestPending=false;setSoundStatus('Browser accepted the recorded sample. If silent, press Tone to check your speakers.');}},
  onPlaybackError(type,error){
   const fallback=playFallbackSound(type);
   if(type==='win'&&ui.soundTestPending){
@@ -114,7 +114,7 @@ function contextForAudio(){
  const AC=window.AudioContext||window.webkitAudioContext;
  if(!AC)return null;
  audioContext ||=new AC();
- if(audioContext.state==='suspended')audioContext.resume();
+ if(audioContext.state==='suspended')audioContext.resume().catch(()=>{});
  return audioContext;
 }
 // Soft procedural table sounds: no downloads, no large sound files or autoplay.
@@ -123,7 +123,7 @@ function sound(type='tap',force=false) {
  if(sampleAudio.play(type,{force}))return;
  playFallbackSound(type);
 }
-function playFallbackSound(type='tap') {
+function playFallbackSound(type='tap',diagnostic=false) {
  if(!ui.soundOn||ui.soundVolume===0)return false;
  try {
   const ctx=contextForAudio();if(!ctx)return false;
@@ -137,7 +137,7 @@ function playFallbackSound(type='tap') {
    oscillator.frequency.setValueAtTime(freq,t);
    if(type==='card'||type==='draw'||type==='deal')oscillator.frequency.exponentialRampToValueAtTime(freq*.91,t+.09);
    gain.gain.setValueAtTime(.0001,t);
-   gain.gain.exponentialRampToValueAtTime((type==='win'?.038:.025)*(ui.soundVolume/85),t+.012);
+   gain.gain.exponentialRampToValueAtTime((diagnostic?.14:(type==='win'?.052:.035))*(ui.soundVolume/85),t+.012);
    gain.gain.exponentialRampToValueAtTime(.0001,t+.17);
    oscillator.connect(gain).connect(ctx.destination);oscillator.start(t);oscillator.stop(t+.19);
   });
@@ -208,7 +208,8 @@ function header() {
     <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Games Night Mix'}</span>
       <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
       <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
-      <button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a sample sound">${icon('play',14)} Test</button>
+      <button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a recorded sample">${icon('play',14)} Test</button>
+      <button data-action="test-tone" class="sound-test-btn sound-tone-btn" aria-label="Play diagnostic tone" title="Check your device with a generated test tone">Tone</button>
       <label class="sound-volume-control" for="sound-volume">Volume <input id="sound-volume" aria-label="Game sound volume" type="range" min="0" max="100" step="5" value="${ui.soundVolume}"></label>
       <output id="sound-status" class="sound-status" role="status" aria-live="polite">${escapeHtml(ui.soundStatus)}</output>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
@@ -871,7 +872,7 @@ app.addEventListener('click',event=>{
  if(!control)return;
  const action=control.dataset.action;
  if(action==='dismiss'&&event.target!==control)return;
- if(['home','scroll-games','avatars','toggle-sound','test-sound','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
+ if(['home','scroll-games','avatars','toggle-sound','test-sound','test-tone','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
    switch(action){
      case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
@@ -880,6 +881,19 @@ app.addEventListener('click',event=>{
      case 'close':case 'dismiss':ui.modal=null;render();break;
      case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn){contextForAudio();ui.soundStatus='Sound enabled. Press Test to check playback.';}else{ui.soundTestPending=false;ui.soundStatus='Sound muted.';}render();break;
      case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}contextForAudio();sampleAudio.resetFailures();ui.soundTestPending=true;ui.soundStatus=ui.soundVolume===0?'Volume is zero. Raise the slider to hear sound.':'Testing sound…';if(ui.soundVolume>0){if(!sampleAudio.play('win',{force:true})){ui.soundTestPending=false;ui.soundStatus=playFallbackSound('win')?'Playing backup tone.':'No audio device detected.';}}render();break;
+     case 'test-tone':{
+       if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}
+       if(ui.soundVolume===0){ui.soundStatus='Volume is zero. Raise it before testing the tone.';render();break;}
+       const started=playFallbackSound('win',true),ctx=audioContext;
+       ui.soundStatus=!started?'Browser does not support the backup audio tone.'
+         :ctx?.state==='running'?'Tone sent to audio output. If silent, check device and browser volume.'
+         :'Unlocking audio. Tap Tone once more if needed.';
+       render();
+       if(started&&ctx?.state==='suspended')ctx.resume().then(()=>{
+         if(ctx.state==='running')setSoundStatus('Tone sent to audio output. If silent, check device and browser volume.');
+       }).catch(()=>setSoundStatus('Browser blocked the tone. Tap Tone again.'));
+       break;
+     }
      case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;
