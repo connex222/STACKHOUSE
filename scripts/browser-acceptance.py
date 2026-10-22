@@ -85,7 +85,7 @@ with sync_playwright() as playwright:
             'result': 'PASS', 'type': 'emulated_mobile_browsers',
             'two_player_game': 'Eight Shift', 'live_opponent_update': True,
             'refresh_recovered': True, 'four_player_game': 'Phase Quest',
-            'browser_contexts': 7, 'widths': [375, 390, 412], 'js_errors': errors
+            'browser_contexts': 6, 'widths': [375, 390, 412], 'js_errors': errors
         }))
     finally:
         for context in contexts:
