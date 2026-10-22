@@ -8,10 +8,11 @@ const KINDS = Object.freeze({
 });
 const MAX_SNAPSHOT_LENGTH = 250_000;
 
-export function encodeSoloSave({mode,game,handOrders={}}) {
+export function encodeSoloSave({mode,game,handOrders={},matchId=null}) {
   if(!Object.hasOwn(KINDS,mode)||!game||game.mode!==mode||game.kind!==KINDS[mode]||
      !Array.isArray(game.players)||game.players.length!==2)throw Error('Cannot save an invalid solo match.');
   const payload={version:SOLO_SAVE_VERSION,mode,game,handOrders};
+  if(matchId!==null){if(typeof matchId!=='string'||!/^[-a-zA-Z0-9_]{12,90}$/.test(matchId))throw Error('Invalid solo match ID.');payload.matchId=matchId;}
   const encoded=JSON.stringify(payload);
   if(encoded.length>MAX_SNAPSHOT_LENGTH)throw Error('Solo save is too large.');
   return encoded;
@@ -31,6 +32,6 @@ export function decodeSoloSave(raw) {
       if(!['sequence','contract','tiles','eights'].includes(zone))continue;
       if(Array.isArray(tokens)&&tokens.length<=100&&tokens.every(t=>typeof t==='string'&&t.length<=120))handOrders[zone]=tokens;
     }
-    return {mode:data.mode,game:data.game,handOrders};
+    return {mode:data.mode,game:data.game,handOrders,...(typeof data.matchId==='string'&&/^[-a-zA-Z0-9_]{12,90}$/.test(data.matchId)?{matchId:data.matchId}:{})};
   }catch{return null;}
 }

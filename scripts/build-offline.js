@@ -9,7 +9,7 @@ const lounge=await inline('assets/lounge.webp');
 const logo=await inline('assets/logo.webp');
 let css=(await read('styles.css')).replaceAll('/assets/lounge.webp',lounge);
 const sources=[];
-for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/game-feel.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
+for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo-records.js','src/game-feel.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
  let code=await read(file);
  code=code.replace(/^import\s+[^;]*;\s*$/gm,'');
  if(file.startsWith('src/engine/')) code=code.replace(/\bclone\b/g,file.includes('sequence')?'sequenceClone':file.includes('contracts')?'contractClone':file.includes('rack')?'rackClone':file.includes('tiles')?'tileClone':file.includes('lowcard')?'lowClone':'eightClone');

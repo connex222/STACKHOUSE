@@ -154,3 +154,18 @@
 @keyframes feel-moment{0%{opacity:0;transform:translate(-50%,20px) scale(.93)}12%,75%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-13px) scale(.96)}}
 @media(max-width:600px){.next-move-guide{margin:8px 0 13px;padding:12px;gap:8px}.next-move-guide p{font-size:11px}.next-move-guide strong{font-size:13px}.next-move-icon{font-size:21px;min-width:27px}.moment-toast{font-size:12px}.site-header .top-actions{gap:5px}}
 @media(prefers-reduced-motion:reduce){.hand-piece.feel-dealt,.game-banner.win:before,.game-banner.win strong,.next-move-guide .next-move-icon,.moment-toast{animation:none!important}.moment-toast{transform:translateX(-50%);opacity:1}}
+
+/* Phase 9: compact shared series scoreboard, always based on server-owned results. */
+.series-board{background:linear-gradient(110deg,#133d3e,#0c2a32);border:1px solid #bca16b;border-radius:15px;padding:14px 18px;margin:11px 0 17px;color:#f6ead0}
+.series-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;font-size:11px;letter-spacing:.05em}
+.series-heading span{font-weight:800;color:#e6c57d}.series-heading strong{font-size:11px;font-weight:700;color:#d7eee4}
+.series-scores{display:flex;align-items:center;justify-content:center;gap:clamp(10px,4vw,55px);padding:8px 0 3px;text-align:center}
+.series-scores>div:not(.series-vs){min-width:95px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.series-scores small{color:#e7eee5;font-size:12px;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.series-scores strong{font:900 29px/1 'Outfit',sans-serif;color:#ffdfa0}
+.series-scores span{font-size:14px;color:#e7bf70;letter-spacing:3px}
+.series-vs{font-size:11px;font-weight:900;letter-spacing:.15em;color:#a8cfc8}
+.series-foot{color:#d2ded4;font-size:11px;margin:7px 0 0;text-align:center;line-height:1.5}
+.sidebar>.series-board{margin:0}.sidebar .series-scores{gap:8px}.sidebar .series-scores>div:not(.series-vs){min-width:70px}.sidebar .series-heading{display:block}
+@media(max-width:600px){.series-board{padding:11px}.series-heading{font-size:10px}.series-scores strong{font-size:24px}.series-scores span{font-size:12px}.series-foot{font-size:10px}}
+.tile-trophy{color:#ffe2a1!important;border-color:#c3a466!important;font-weight:800}

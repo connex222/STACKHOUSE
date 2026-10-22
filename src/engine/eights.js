@@ -7,7 +7,30 @@ export function eightCanPlay(card,game){return Boolean(card)&&(card.value===8||c
 export function eightPlay(input,index,newSuit=null){const s=clone(input);if(s.winner!==null)return {error:'Match finished.'};const hand=s.players[s.active].hand;if(!Number.isInteger(index)||index<0||index>=hand.length)return {error:'Choose a valid card.'};const card=hand[index];if(!eightCanPlay(card,s))return {error:'Match the suit or rank, or play an eight.'};if(card.value===8&&!SUITS.includes(newSuit))return {error:'Choose a suit for your eight.'};hand.splice(index,1);s.discard.push(card);s.activeSuit=card.value===8?newSuit:card.suit;s.log.unshift(`${s.players[s.active].name} played ${card.value===8?'a wild eight':card.value} (${s.activeSuit}).`);if(!hand.length){s.winner=s.active;s.log.unshift(`${s.players[s.active].name} played their last card!`);}else{s.active=1-s.active;s.drew=false;s.turn++;}return {state:s};}
 export function eightDraw(input){const s=clone(input);if(s.winner!==null||s.drew)return {error:'You may only draw one card per turn.'};if(!s.draw.length&&s.discard.length>1){const top=s.discard.pop();s.draw=shuffle(s.discard,mulberry32(s.turn^s.players[0].hand.length^s.players[1].hand.length));s.discard=[top];}if(!s.draw.length)return {error:'There are no cards to draw.'};s.players[s.active].hand.push(s.draw.pop());s.drew=true;s.log.unshift(`${s.players[s.active].name} drew one card.`);return {state:s};}
 export function eightPass(input){const s=clone(input);if(s.winner!==null||!s.drew)return {error:'You must draw before passing.'};s.active=1-s.active;s.drew=false;s.turn++;s.log.unshift(`${s.players[1-s.active].name} passed.`);return {state:s};}
-export function runEightBot(input){let s=clone(input);if(s.active!==1||s.winner!==null)return s;let choices=s.players[1].hand.map((card,i)=>({card,i})).filter(x=>eightCanPlay(x.card,s));if(!choices.length){const r=eightDraw(s);if(!r.error)s=r.state;choices=s.players[1].hand.map((card,i)=>({card,i})).filter(x=>eightCanPlay(x.card,s));}
- if(choices.length){const pick=choices.find(x=>x.card.value!==8)||choices[0];const suits=SUITS.map(suit=>({suit,n:s.players[1].hand.filter(c=>c.suit===suit&&c!==pick.card).length})).sort((a,b)=>b.n-a.n);return eightPlay(s,pick.i,pick.card.value===8?suits[0].suit:null).state;}
- const r=eightPass(s);return r.error?s:r.state;
+// Choose a playable card without inspecting the human player's hidden hand.
+// Keep wild eights until needed, then favour a suit represented in our hand.
+export function chooseEightBotMove(state){
+ const hand=state.players[1].hand;
+ const choices=hand.map((card,i)=>({card,i})).filter(x=>eightCanPlay(x.card,state));
+ if(!choices.length)return null;
+ const natural=choices.filter(x=>x.card.value!==8);
+ const pool=natural.length?natural:choices;
+ const ranked=pool.map(option=>{
+  const remaining=hand.filter((_,i)=>i!==option.i);
+  const preferred=option.card.value===8?
+   SUITS.map(suit=>({suit,n:remaining.filter(c=>c.suit===suit).length})).sort((a,b)=>b.n-a.n||SUITS.indexOf(a.suit)-SUITS.indexOf(b.suit))[0].suit:null;
+  const playedSuit=preferred??option.card.suit;
+  const follow=remaining.filter(c=>c.suit===playedSuit).length;
+  const highCard=option.card.value===8?0:option.card.value;
+  return {...option,suit:preferred,score:follow*20+highCard};
+ });
+ ranked.sort((a,b)=>b.score-a.score||a.i-b.i);
+ return ranked[0];
+}
+export function runEightBot(input){
+ let s=clone(input);if(s.active!==1||s.winner!==null)return s;
+ let pick=chooseEightBotMove(s);
+ if(!pick){const r=eightDraw(s);if(!r.error)s=r.state;pick=chooseEightBotMove(s);}
+ if(pick){const result=eightPlay(s,pick.i,pick.suit);return result.error?s:result.state;}
+ const result=eightPass(s);return result.error?s:result.state;
 }

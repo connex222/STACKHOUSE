@@ -80,3 +80,20 @@ test('HTTP integration: retry acknowledgement is idempotent and different payloa
   assert.equal(stale.status,409);
  }finally{await close();}
 });
+
+
+test('HTTP integration: series scoreboard stays synchronised on both players and offline HTML is served',async()=>{
+ const {base,close}=await serverFixture();
+ try{
+  const host=(await post(`${base}/api/rooms`,{mode:'eight-shift',name:'Ada',avatar:7})).data;
+  const guest=(await post(`${base}/api/rooms/${host.code}/join`,{name:'Kit',avatar:9})).data;
+  assert.deepEqual(host.view.series.wins,[0,0]);
+  const a=await (await fetch(`${base}/api/rooms/${host.code}/state`,{headers:{authorization:`Bearer ${host.token}`}})).json();
+  const b=await (await fetch(`${base}/api/rooms/${host.code}/state`,{headers:{authorization:`Bearer ${guest.token}`}})).json();
+  assert.deepEqual(a.series,b.series);assert.equal(a.series.target,3);
+  assert.equal(Object.hasOwn(a.series,'tokenHash'),false);
+  const solo=await fetch(`${base}/PLAY-OFFLINE.html`);
+  assert.equal(solo.status,200);assert.match(solo.headers.get('content-type'),/html/);
+  assert.match((await solo.text()).slice(0,700),/Stackhouse Social/);
+ }finally{await close();}
+});

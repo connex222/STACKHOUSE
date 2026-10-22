@@ -1,3 +1,9 @@
+# STACKHOUSE SOCIAL — Phase 9: Games Night Series (v0.9.0)
+
+See [Phase 9 release notes](README_PHASE9.md) for match-series scoring, solo records and improved bot play.
+
+---
+
 # STACKHOUSE SOCIAL — Phase 8: Make It Fun (v0.8.0)
 
 The ten games are unchanged; Phase 8 improves how they *feel* on both phones and desktop.

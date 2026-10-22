@@ -67,14 +67,14 @@ const server=createServer(async(req,res)=>{
     }
     if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed.'});
     const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));
-    if(!file.startsWith(root+path.sep)||!allowed.has(path.extname(file))||!['index.html','styles.css','assets','src'].some(a=>file===path.join(root,a)||file.startsWith(path.join(root,a)+path.sep))){
+    if(!file.startsWith(root+path.sep)||!allowed.has(path.extname(file))||!['index.html','styles.css','PLAY-OFFLINE.html','assets','src'].some(a=>file===path.join(root,a)||file.startsWith(path.join(root,a)+path.sep))){
       res.writeHead(403);res.end('Forbidden');return;
     }
     await stat(file);
     const data=await readFile(file);
     res.writeHead(200,{'content-type':mime[path.extname(file)],'cache-control':'no-cache',
       'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
-      'content-security-policy':"default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self'"});
+      'content-security-policy':pathname==='/PLAY-OFFLINE.html'?"default-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline'":"default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self'"});
     if(req.method==='HEAD')return res.end();
     res.end(data);
   } catch(err) {

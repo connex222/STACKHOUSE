@@ -7,6 +7,7 @@ import { createRackGame, rackDraw, rackReplace, rackDiscard } from '../engine/ra
 import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
 import { createLowGame, lowDraw, lowReplace, lowFlip, lowNextRound } from '../engine/lowcard.js';
 import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eights.js';
+import {createSeries,ensureSeries,recordMatchResult,beginNextGame,publicSeries} from './series.js';
 
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
 const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
@@ -96,7 +97,7 @@ export class RoomStore {
     try {
       const parsed=JSON.parse(await readFile(this.storageFile,'utf8'));
       for(const record of parsed.rooms ?? []) {
-        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) this.rooms.set(record.code,record);
+        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) {ensureSeries(record);record.recentActions??=[];record.rematchVotes??=[false,false];this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
@@ -140,7 +141,7 @@ export class RoomStore {
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[]};
+    const room={code,mode,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[],gameNumber:1,series:createSeries()};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
   }
   createGame(mode,seed) {
@@ -167,7 +168,7 @@ export class RoomStore {
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
-    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],
+    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageFile?'configured':'memory-only'};
   }
@@ -199,11 +200,13 @@ export class RoomStore {
     const game=room.game;
     if(action.type==='rematch-request'||action.type==='rematch-cancel') {
       if(game.winner===null)throw Error('Finish the match before requesting a rematch.');
+      recordMatchResult(room); // Backfill completed legacy rooms on their first rematch vote.
       const votes=room.rematchVotes??[false,false];
       const choice=action.type==='rematch-request';
       if(votes[seat]===choice)throw Error(choice?'You have already requested a rematch.':'No rematch request to cancel.');
       votes[seat]=choice;room.rematchVotes=votes;
       if(votes.every(Boolean)) {
+        beginNextGame(room);
         room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE()));
         room.game.players.forEach((p,i)=>p.name=room.players[i].name);
         room.game.log=[`Rematch started: ${room.players[0].name} versus ${room.players[1].name}.`];
@@ -288,6 +291,7 @@ export class RoomStore {
       }
       if(outcome?.error)throw Error(outcome.error);
       room.game=outcome.state;
+      recordMatchResult(room);
     }
     acknowledge();room.revision++;room.updated=this.now();
     await this.save();this.notify(code);
