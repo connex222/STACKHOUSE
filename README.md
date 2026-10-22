@@ -1,4 +1,4 @@
-> **Current release: v1.6.0 — Phase 16 rules and accessibility corrections.** See [Phase 16 release notes](README_PHASE16.md) and the [independent release-validation checklist](README_RELEASE_VALIDATION.md).
+> **Current release: v1.7.0 — Phase 17 accessibility and release-readiness checks.** See [Phase 17 release notes](README_PHASE17.md), [Phase 16 rules fixes](README_PHASE16.md) and the [release-validation checklist](README_RELEASE_VALIDATION.md).
 
 # STACKHOUSE SOCIAL — Previous releases
 

@@ -234,3 +234,9 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
  .game-tile{grid-template-columns:minmax(86px,32%) minmax(0,1fr)}
  .game-heading h1,.hero h1{overflow-wrap:anywhere}
 }
+
+/* Phase 17: keyboard bypass and explicit focus on the active page region. */
+.skip-link{position:fixed;top:12px;left:12px;z-index:90;transform:translateY(-180%);padding:12px 16px;border-radius:9px;border:3px solid #093b35;background:#f6dc9b;color:#112d2c;font:800 15px/1.35 system-ui,sans-serif;text-decoration:none;box-shadow:0 6px 22px #0008}
+.skip-link:focus,.skip-link:focus-visible{transform:translateY(0);outline:3px solid #ffffff;outline-offset:3px}
+#main-content:focus{outline:3px solid #9affda;outline-offset:-3px}
+@media(prefers-reduced-motion:reduce){.skip-link{transition:none}}
