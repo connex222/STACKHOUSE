@@ -9,7 +9,7 @@ const lounge=await inline('assets/lounge.webp');
 const logo=await inline('assets/logo.webp');
 let css=(await read('styles.css')).replaceAll('/assets/lounge.webp',lounge);
 const sources=[];
-for(const file of ['src/rng.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
+for(const file of ['src/rng.js','src/hand-order.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
  let code=await read(file);
  code=code.replace(/^import\s+[^;]*;\s*$/gm,'');
  if(file.startsWith('src/engine/')) code=code.replace(/\bclone\b/g,file.includes('sequence')?'sequenceClone':file.includes('contracts')?'contractClone':file.includes('rack')?'rackClone':file.includes('tiles')?'tileClone':file.includes('lowcard')?'lowClone':'eightClone');
@@ -30,4 +30,4 @@ const js=`(()=>{\nconst OFFLINE_AVATARS=${JSON.stringify(avatars)};\nconst OFFLI
 const html=`<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#071d20"><title>Stackhouse Social — Ten games offline</title><style>${css}</style></head><body><div id="app" aria-live="polite"></div><script>${js}</script></body></html>`;
 if(html.includes('src="/assets/avatar') || html.includes('src="/assets/logo'))throw Error('Offline assets were not embedded.');
 await writeFile(resolve(root,'PLAY-OFFLINE.html'),html);
-console.log(`Standalone Phase 4 bot edition built (${Math.round(html.length/1024)} KiB).`);
+console.log(`Standalone reorder-enabled bot edition built (${Math.round(html.length/1024)} KiB).`);

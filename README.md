@@ -1,5 +1,17 @@
 # STACKHOUSE SOCIAL — Phase 4: Ten Tables
 
+## Hand and tile reordering — Phase 4.1
+
+The latest update lets players rearrange their hands in **Stack Run**, **Phase Quest**, **Malice Duel**, **Contract Club**, **Crown Circuit**, **Shanghai Nights**, **Tile Royale** and **Eight Shift**.
+
+- Drag and drop cards or tiles to rearrange them with mouse, touch or stylus.
+- On phones, use **Arrange**, select a card, then select its destination. Select **Done arranging** to return to normal play.
+- Use **Sort ↑** to sort by number, or **Alt + Left/Right Arrow** while a card is focused.
+- Hand order affects presentation only: server-owned hand positions and legality remain unchanged. Newly drawn cards append to the displayed order.
+- **Number Ladder** and **Low Glow** deliberately retain fixed card grids because positions affect their rules.
+
+Automated checks: **67 tests passed** for this update. Full physical two-phone multiplayer acceptance testing is still pending.
+
 **Ten playable original card and tile variants.** This is a phone-first private games-night collection, with 16 selectable portrait avatars, a gold-and-teal lounge, bot opponents, optional card sounds and private server-authoritative two-player rooms.
 
 ## Play immediately
@@ -43,7 +55,7 @@ These are **independently implemented house-rule variants**, not official releas
 ## Run builds and automated checks
 
 ```bash
-npm test             # Phase 4: 62 automated tests
+npm test             # Phase 4: 67 automated tests
 npm run build        # Assemble static dist/ (no multiplayer backend by itself)
 npm run build:offline  # Recreate self-contained PLAY-OFFLINE.html
 ```
@@ -54,7 +66,7 @@ Tests cover core game legality, card inventory, deterministic bots, secure room 
 
 The provided `render.yaml` specifies a **Node web service**, not a static website. To publish live multiplayer, put this project in its own GitHub repository and configure Render to build with `npm run build` and start with `npm start`. The `/health` route returns application status. For persistence through server restarts, configure a protected storage volume and `ROOM_DATA_FILE`, or migrate to a managed database. This server is designed for a **single Node process** with private two-player rooms, not public matchmaking or large-scale production traffic. Rotate/restrict infrastructure credentials appropriately and review hosting costs.
 
-**Current deployment status:** The files are packaged locally. This Phase 4 build has **not** been pushed to GitHub or deployed to Render. A dedicated Stackhouse Social repository has not been verified.
+**Current deployment status:** Phase 4.1 is maintained in the dedicated GitHub repository `connex222/STACKHOUSE`. A live Render deployment has not been verified.
 
 ## Outstanding development work
 

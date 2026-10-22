@@ -97,3 +97,24 @@
 .suit-choice>b{width:100%;text-align:center;margin-bottom:5px;color:#f1d79d}
 .suit-choice .btn{min-width:105px}
 @media(max-width:650px){.tile-board,.low-felt,.eight-felt{padding:20px 8px}.tile-face{min-width:39px;min-height:66px;font-size:23px}.tiles-rack{gap:6px}.low-card{min-height:63px}.eight-card{min-width:47px;height:85px;padding:8px}.eight-card b{font-size:30px}.eight-hand{gap:6px}.suit-choice .btn{min-width:85px;padding:8px}.tile-actions .btn{flex:1 1 120px}}
+
+/* Card / tile arrangement upgrade: works with pointer, touch and keyboard. */
+.hand-organiser{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:9px 0 2px;min-height:34px}
+.hand-organiser-hint{margin-right:auto;color:#a5cfc8;font-size:11px;line-height:1.35}
+.arrange-toggle,.arrange-sort{color:#f7e6bb;background:#164c4c;border:1px solid #a58b57;border-radius:9px;font:700 11px 'DM Sans',sans-serif;min-height:36px;padding:7px 12px;cursor:pointer}
+.arrange-toggle.active{background:#ead09a;color:#123d38;border-color:#f2dfa4}
+.arrange-toggle:focus-visible,.arrange-sort:focus-visible{outline:3px solid #82ebd1;outline-offset:2px}
+.hand-piece{display:flex;position:relative;flex:0 0 auto;border-radius:10px;transition:transform .16s ease,filter .16s ease;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
+.hand-piece > button{touch-action:none;user-select:none;-webkit-user-select:none;pointer-events:auto}
+.hand-piece.drag-source{opacity:.25}
+.hand-piece.drop-destination{outline:3px dashed #f6d38e;outline-offset:4px;filter:drop-shadow(0 0 9px #83d6a7)}
+.hand-piece.arrange-picked{outline:3px solid #f5d182;outline-offset:4px;transform:translateY(-5px)}
+.hand-piece:focus-within{outline:2px solid #67dcc9;outline-offset:2px}
+.hand-piece > .tile-button,.hand-piece > .eight-card{cursor:grab}
+.hand-piece:active,.hand-piece:active > button{cursor:grabbing}
+.drag-ghost{position:fixed!important;z-index:9999;pointer-events:none;transform:translate(-50%,-50%) rotate(-5deg) scale(1.07);filter:drop-shadow(0 15px 18px #000a);opacity:.98;touch-action:none;transition:none!important}
+.drag-ghost > button{pointer-events:none}
+.hand-organiser + .hand-cards,.hand-organiser + .tiles-rack,.hand-organiser + .eight-hand{margin-top:12px}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:600px){.hand-organiser{gap:6px}.hand-organiser-hint{flex-basis:100%;font-size:10px}.arrange-toggle,.arrange-sort{min-height:39px;font-size:11px}}
+@media(prefers-reduced-motion:reduce){.hand-piece,.drag-ghost{transition:none!important}}

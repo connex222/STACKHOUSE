@@ -1,4 +1,5 @@
 import { sessionSeed } from './rng.js';
+import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-order.js';
 import { createSequenceGame, sequencePileTargets, playSequenceCard, discardSequenceCard, runSequenceBot } from './engine/sequence.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard, runRackBot } from './engine/rack.js';
 import { createContractGame, currentMission, missionDescription, findContract, drawContractCard, discardContractCard, layContract, nextContractRound, runContractBot, MISSION_SETS } from './engine/contracts.js';
@@ -24,7 +25,7 @@ const games = [
 ];
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')==='true',lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null};
+  soundOn:localStorage.getItem('stackhouse.sound')==='true',lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:''};
 const app=document.getElementById('app');
 const isOnline=()=>Boolean(ui.online);
 const opponentProfile=()=>ui.online?.view?.players?.[1-ui.online.seat];
@@ -80,7 +81,7 @@ function header() {
   const ava=asset(ui.avatarId);
   return `<header class="site-header"><button class="brand" data-action="home" aria-label="Stackhouse Social home">
     <img src="/assets/logo.webp" alt="" width="54" height="54"><span class="brand-word">STACKHOUSE <small>SOCIAL</small></span></button>
-    <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Phase 4 · Ten tables'}</span>
+    <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Arrange hands'}</span>
       <button data-action="toggle-sound" class="icon-button" aria-label="${ui.soundOn?'Mute':'Enable'} game sounds" title="${ui.soundOn?'Mute':'Enable'} sounds">${icon(ui.soundOn?'sound':'mute',20)}</button>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
     </nav></header>`;
@@ -138,6 +139,32 @@ function actionSidebar(extra='') {
  ${isOnline()?`<button class="reset-btn" data-action="room-invite">${icon('people',15)} Copy room invitation</button>`:`<button class="reset-btn" data-action="restart">${icon('refresh',15)} Start a fresh match</button>`}
  </aside>`;
 }
+// Player-controlled presentation order; never mutate server-controlled hand arrays.
+function getOrderedHand(zone,cards){
+ const keys=handTokens(cards);
+ ui.handOrders[zone]=reconcileHandOrder(ui.handOrders[zone]||[],cards);
+ return ui.handOrders[zone].map((key,pos)=>({item:cards[keys.indexOf(key)],index:keys.indexOf(key),key,pos}));
+}
+function handToolbar(zone){
+ return `<div class="hand-organiser" aria-label="Arrange your cards or tiles">
+  <span class="hand-organiser-hint">${ui.arranging?'Tap one, then tap where it should go':'Drag to reorder · or use Arrange'}</span>
+  <button class="arrange-toggle ${ui.arranging?'active':''}" data-action="hand-arrange" aria-pressed="${ui.arranging}">${ui.arranging?'Done arranging':'↔ Arrange'}</button>
+  <button class="arrange-sort" data-action="hand-sort" data-zone="${zone}">Sort ↑</button>
+ </div>`;
+}
+function handItems(zone,cards,face){
+ return getOrderedHand(zone,cards).map(({item,index,key,pos})=>`<div class="hand-piece ${ui.arranging&&ui.arrangeFrom?.zone===zone&&ui.arrangeFrom.pos===pos?'arrange-picked':''}" data-order-zone="${zone}" data-order-position="${pos}" data-order-key="${escapeHtml(key)}" title="Drag to move. Keyboard: Alt + Left or Right arrow.">${face(item,index)}</div>`).join('');
+}
+function reorderHand(zone,from,to){
+ const order=ui.handOrders[zone];
+ if(!order||from===to||from<0||to<0||from>=order.length||to>=order.length)return false;
+ ui.handOrders[zone]=moveHandToken(order,from,to);
+ ui.orderMessage=`Moved item ${from+1} to position ${to+1}.`;
+ ui.arrangeFrom=null;
+ sound('card');render();return true;
+}
+function resetArrangement(){ui.handOrders={};ui.arranging=false;ui.arrangeFrom=null;ui.orderMessage='';}
+
 function sequenceScreen() {
  const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo();
  const isHuman=s.active===0&&s.winner===null;
@@ -153,7 +180,7 @@ function sequenceScreen() {
   <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.stock.length} cards left in your stockpile`,isHuman)}</div>
   <div class="your-tableau"><div class="hand-heading"><b>YOUR STOCKPILE</b><b>YOUR DISCARD STACKS</b></div><div class="stock-discard-row"><div class="stock-zone">${seqCard(p.stock.at(-1),'seq-source','data-type="stock" data-index="0"',selected?.type==='stock')}</div><div class="four-mini-piles">${p.discards.map((pile,i)=>seqDiscardPile(pile,i)).join('')}</div></div>
   <div class="hand-heading"><b>YOUR HAND <span>(${p.hand.length} cards)</span></b><small>${isHuman?'Select a card to play':'Waiting for turn'}</small></div>
-  <div class="hand-cards">${p.hand.map((card,i)=>seqCard(card,'seq-source',`data-type="hand" data-index="${i}"`,selected?.type==='hand'&&selected.index===i)).join('')}</div>
+  ${handToolbar('sequence')}<div class="hand-cards reordable-hand">${handItems('sequence',p.hand,(card,i)=>seqCard(card,'seq-source',`data-type="hand" data-index="${i}"`,selected?.type==='hand'&&selected.index===i))}</div>
   ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
   <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'}>Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
  </div></div>
@@ -185,7 +212,7 @@ function contractScreen() {
  <span class="discard-rank">${s.discard.at(-1)?.wild?'★':s.discard.at(-1)?.value??'—'}</span><b>TAKE DISCARD</b><small>${s.discard.at(-1)?.colour||'Empty'}</small></button></div>
  <p class="board-hint">${!human?'The round has ended.':drawn?'Now lay your contract, or select one card to discard.':'Draw from the deck or take the top discard card.'}</p></div>
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`Contract ${Math.min(p.mission+1,missions.length)} of ${missions.length}`,human)}</div>
- <div class="your-tableau"><div class="hand-heading"><b>YOUR CARDS <span>(${p.hand.length})</span></b><small>${s.step==='draw'?'Draw one card first':'Choose your next move'}</small></div><div class="hand-cards contract-hand">${p.hand.map((card,i)=>contractCard(card,i)).join('')}</div>
+ <div class="your-tableau"><div class="hand-heading"><b>YOUR CARDS <span>(${p.hand.length})</span></b><small>${s.step==='draw'?'Draw one card first':'Choose your next move'}</small></div>${handToolbar('contract')}<div class="hand-cards contract-hand reordable-hand">${handItems('contract',p.hand,(card,i)=>contractCard(card,i))}</div>
  <div class="contract-actions"><button class="btn btn-primary" data-action="lay-contract" ${canLay?'':'disabled'}>${icon('check',17)} Lay my contract</button>
  <button class="btn btn-outline" data-action="contract-discard" ${human&&drawn&&ui.selected?.type==='contract-hand'?'':'disabled'}>Discard selected card ${icon('arrow',17)}</button></div>
  ${match&&human&&drawn?'<div class="matched-notice">✨ Your hand contains the full contract. Lay it now!</div>':''}
@@ -221,7 +248,7 @@ function tileScreen(){const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo
  return `<main class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${bot.rack.length} hidden tiles`)}<div class="bot-cards">${Array.from({length:Math.min(8,bot.rack.length)},()=>'<div class="tile-back">◆</div>').join('')}</div></div>
  <div class="tile-board"><div class="board-section-label">TABLE MELDS · TAP TO EXTEND</div><div class="tile-groups">${s.groups.length?s.groups.map((group,i)=>`<button class="tile-meld" data-action="tile-target" data-index="${i}" ${!myTurn||!indices.length?'disabled':''}><small>${group.type.toUpperCase()} ${i+1}</small><span class="tile-group-cards">${group.tiles.map(t=>tileFace(t)).join('')}</span></button>`).join(''):'<p class="board-hint">No groups laid yet. Play the first set or run.</p>'}</div>
  <p class="board-hint">${myTurn?`${indices.length} tile(s) selected${valid?' · Valid '+valid:''}. Choose “Lay new group”, or extend a table group.`:'Waiting for the other player.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.rack.length} tiles remaining`,myTurn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR TILE RACK</b><small>Tap tiles to select several</small></div><div class="tiles-rack">${p.rack.map((t,i)=>`<button class="tile-button" data-action="tile-select" data-index="${i}" aria-pressed="${indices.includes(i)}" ${!myTurn?'disabled':''}>${tileFace(t,'',indices.includes(i))}</button>`).join('')}</div>
+ <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.rack.length} tiles remaining`,myTurn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR TILE RACK</b><small>Tap tiles to select several</small></div>${handToolbar('tiles')}<div class="tiles-rack reordable-hand">${handItems('tiles',p.rack,(t,i)=>`<button class="tile-button" data-action="tile-select" data-index="${i}" aria-pressed="${indices.includes(i)}" aria-disabled="${!myTurn}">${tileFace(t,'',indices.includes(i))}</button>`)}</div>
  <div class="contract-actions tile-actions"><button class="btn btn-primary" data-action="tile-lay" ${!myTurn||!valid?'disabled':''}>Lay new group ${icon('check',17)}</button><button class="btn btn-outline" data-action="tile-end" data-draw="false" ${!myTurn||(!s.playedThisTurn&&s.draw.length>0)?'disabled':''}>End turn</button><button class="btn btn-outline" data-action="tile-end" data-draw="true" ${!myTurn||s.playedThisTurn||!s.draw.length?'disabled':''}>Draw a tile (${s.draw.length})</button></div></div></div>
  ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU CLEARED YOUR RACK!':'OPPONENT CLEARED THEIR RACK'}</strong>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host.</span>':'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
@@ -237,12 +264,12 @@ function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(
  ${s.roundWinner!==null?`<div class="game-banner ${s.winner===-1?'':s.winner===null?'win':s.winner===0?'win':'lose'}"><strong>${s.winner!==null?s.winner===-1?'MATCH TIED':s.winner===0?'LOW-SCORE CHAMPION!':'YOUR OPPONENT WON':`ROUND ${s.round} FINISHED`}</strong><span>Totals: You ${p.score} · ${isOnline()?escapeHtml(opponentName()):'Bot'} ${opp.score} points.</span>${isOnline()&&s.winner!==null&&ui.online.seat!==0?'<span>Waiting for the host.</span>':`<button class="btn btn-primary" data-action="${s.winner===null?'next-round':'restart'}">${s.winner===null?'Next round':'New match'}</button>`}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 const suitsGlyph={hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
-function eightFace(card,i,turn,s){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${!turn?'disabled':''} aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
+function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
 function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.winner===null,top=s.discard.at(-1);
  const side=`<div class="side-panel objectives"><span class="eyebrow">CARD MATCHING</span><h3>Get rid of every card.</h3><p>Match the discard's suit or rank, or play a wild eight and declare a new suit. Draw once if you need a card; you may then play or pass.</p><div class="side-tip">${icon('sparkle',16)} Play the colour or rank, but save your wild eights for difficult turns.</div></div>`;
  return `<main class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${opp.hand.length} cards remaining`)}<div class="bot-cards">${opp.hand.map(()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
  <div class="eight-felt"><div class="board-section-label">ACTIVE SUIT: <b>${suitsGlyph[s.activeSuit]} ${s.activeSuit.toUpperCase()}</b></div><div class="eight-middle"><button class="draw-pile draw-deck" data-action="eight-draw" ${turn&&!s.drew?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW ONE</b><small>${s.draw.length} remaining</small></button><div class="eight-top">${eightFace(top,-1,false,s)}</div></div><p class="board-hint">${turn?'Choose a highlighted card, or draw once.':'Waiting for the other player.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.hand.length} cards left`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR HAND</b><small>${s.drew?'Drawn this turn · play or pass':'Match rank or suit'}</small></div><div class="eight-hand">${p.hand.map((c,i)=>eightFace(c,i,turn,s)).join('')}</div>
+ <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.hand.length} cards left`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR HAND</b><small>${s.drew?'Drawn this turn · play or pass':'Match rank or suit'}</small></div>${handToolbar('eights')}<div class="eight-hand reordable-hand">${handItems('eights',p.hand,(c,i)=>eightFace(c,i,turn,s,true))}</div>
  ${ui.selected?.type==='eight'&&p.hand[ui.selected.index]?.value===8?`<div class="suit-choice"><b>Choose a new suit:</b>${SUITS.map(suit=>`<button class="btn btn-outline" data-action="eight-suit" data-suit="${suit}">${suitsGlyph[suit]} ${suit}</button>`).join('')}</div>`:''}
  <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&s.drew?'':'disabled'}>Pass after drawing ${icon('arrow',17)}</button></div></div></div>
  ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU PLAYED YOUR LAST CARD!':'OPPONENT WON THE HAND'}</strong>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host.</span>':'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
@@ -268,14 +295,14 @@ function modalContent() {
 }
 function render(){
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> PHASE 4</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
- ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}`;
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> HAND ARRANGEMENT UPDATE</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
+ ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}`;
 }
 function start(mode){
  stopOnline();
  const found=games.find(g=>g.id===mode);
  if(!found)return;
- ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;
+ ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;resetArrangement();
  const seed=sessionSeed();
    ui.game=found.kind==='sequence'?createSequenceGame({mode,seed}):found.kind==='rack'?createRackGame({mode,seed}):found.kind==='tiles'?createTileGame({mode,seed}):found.kind==='low'?createLowGame({mode,seed}):found.kind==='eights'?createEightGame({mode,seed}):createContractGame({mode,seed});
  sound('card');render();window.scrollTo({top:0,behavior:'instant'});
@@ -346,7 +373,7 @@ function syncRoom(view) {
   render();
 }
 function connectRoom(code,token,view) {
-  stopOnline();ui.online={code,token,seat:view.seat,view:null};ui.netStatus='Connecting';syncRoom(view);
+  stopOnline();resetArrangement();ui.online={code,token,seat:view.seat,view:null};ui.netStatus='Connecting';syncRoom(view);
   localStorage.setItem(`stackhouse.room.${code}`,token);
   localStorage.setItem('stackhouse.lastRoom',code);
   const uri=new URL(location.href);uri.searchParams.set('room',code);history.replaceState(null,'',uri);
@@ -389,7 +416,7 @@ async function withRoomAction(action) {
 async function roomButton(action,control) {
   try {
     if(action==='room-open') {
-      stopOnline();ui.screen='room';ui.game=null;ui.roomMode=control.dataset.mode||ui.roomMode;ui.roomCode='';
+      stopOnline();ui.screen='room';ui.game=null;resetArrangement();ui.roomMode=control.dataset.mode||ui.roomMode;ui.roomCode='';
       render();return;
     }
     if(action==='room-switch'){ui.roomCode=ui.roomCode?'':' ';render();return;}
@@ -412,6 +439,85 @@ async function roomButton(action,control) {
     }
   }catch(err){toast(err.message,true);}
 }
+// Pointer-based drag for mouse, stylus and touch. A normal tap still plays the card.
+let activeDrag=null,swallowDragClick=0;
+function clearDrag(){
+ if(!activeDrag)return;
+ activeDrag.source?.classList.remove('drag-source');
+ document.querySelectorAll('.hand-piece.drop-destination').forEach(el=>el.classList.remove('drop-destination'));
+ activeDrag.ghost?.remove();activeDrag=null;
+}
+function pointerTarget(zone,x,y){
+ const elements=[...document.querySelectorAll(`.hand-piece[data-order-zone="${zone}"]`)];
+ const container=elements[0]?.parentElement;
+ if(!container)return null;
+ const rect=container.getBoundingClientRect();
+ if(x<rect.left-40||x>rect.right+40||y<rect.top-40||y>rect.bottom+40)return null;
+ const element=document.elementFromPoint(x,y)?.closest('.hand-piece');
+ if(element?.dataset.orderZone===zone)return element;
+ return elements.reduce((best,element)=>{
+  const r=element.getBoundingClientRect(),dx=x-(r.left+r.width/2),dy=y-(r.top+r.height/2);
+  const d=dx*dx+dy*dy;return !best||d<best.distance?{element,distance:d}:best;
+ },null)?.element||null;
+}
+app.addEventListener('pointerdown',event=>{
+ if(event.button!==undefined&&event.button!==0)return;
+ const piece=event.target.closest('.hand-piece[data-order-zone]');
+ if(!piece||!ui.game||ui.modal)return;
+ activeDrag={id:event.pointerId,source:piece,zone:piece.dataset.orderZone,from:Number(piece.dataset.orderPosition),x:event.clientX,y:event.clientY,dragged:false,ghost:null,target:null};
+});
+app.addEventListener('pointermove',event=>{
+ const d=activeDrag;if(!d||event.pointerId!==d.id)return;
+ if(!d.dragged&&Math.hypot(event.clientX-d.x,event.clientY-d.y)<9)return;
+ if(!d.dragged){
+  d.dragged=true;try{d.source.setPointerCapture(event.pointerId);}catch{}
+  d.source.classList.add('drag-source');
+  d.ghost=d.source.cloneNode(true);d.ghost.classList.add('drag-ghost');d.ghost.classList.remove('drag-source');
+  d.ghost.removeAttribute('data-order-zone');d.ghost.querySelectorAll('[data-action]').forEach(el=>el.removeAttribute('data-action'));
+  document.body.appendChild(d.ghost);
+ }
+ event.preventDefault();
+ d.ghost.style.left=`${event.clientX}px`;d.ghost.style.top=`${event.clientY}px`;
+ const target=pointerTarget(d.zone,event.clientX,event.clientY);
+ if(d.target!==target){d.target?.classList.remove('drop-destination');d.target=target;target?.classList.add('drop-destination');}
+});
+function finishDrag(event,cancel=false){
+ const d=activeDrag;if(!d||event.pointerId!==d.id)return;
+ const moved=d.dragged,from=d.from,to=cancel?null:(d.target?Number(d.target.dataset.orderPosition):null),zone=d.zone;
+ clearDrag();
+ if(!moved)return;
+ swallowDragClick=Date.now()+500;
+ if(to!==null)reorderHand(zone,from,to);
+}
+app.addEventListener('pointerup',event=>finishDrag(event));
+app.addEventListener('pointercancel',event=>finishDrag(event,true));
+// The organiser's first capture handler runs before private-room gameplay commands.
+app.addEventListener('click',event=>{
+ if(swallowDragClick>Date.now()&&event.target.closest?.('.hand-piece')){swallowDragClick=0;event.stopImmediatePropagation();event.preventDefault();return;}
+ swallowDragClick=0;
+ const control=event.target.closest('[data-action]');if(!control)return;
+ const action=control.dataset.action;
+ if(['hand-arrange','hand-sort'].includes(action)){
+  event.stopImmediatePropagation();event.preventDefault();
+  if(action==='hand-arrange'){ui.arranging=!ui.arranging;ui.arrangeFrom=null;}
+  else {const zone=control.dataset.zone,cards=zone==='tiles'?ui.game?.players[0]?.rack:ui.game?.players[0]?.hand;
+   if(!cards)return;ui.handOrders[zone]=sortHandOrder(cards);ui.orderMessage='Hand sorted by number.';ui.arrangeFrom=null;}
+  sound();render();return;
+ }
+ const piece=control.closest?.('.hand-piece[data-order-zone]');
+ if(!piece||!ui.arranging)return;
+ event.stopImmediatePropagation();event.preventDefault();
+ const zone=piece.dataset.orderZone,pos=Number(piece.dataset.orderPosition);
+ if(!ui.arrangeFrom||ui.arrangeFrom.zone!==zone){ui.arrangeFrom={zone,pos};ui.orderMessage=`Selected position ${pos+1}. Choose its new position.`;sound();render();}
+ else if(ui.arrangeFrom.pos===pos){ui.arrangeFrom=null;render();}
+ else reorderHand(zone,ui.arrangeFrom.pos,pos);
+},true);
+app.addEventListener('keydown',event=>{
+ if(!event.altKey||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+ const piece=event.target.closest?.('.hand-piece[data-order-zone]');if(!piece)return;
+ const zone=piece.dataset.orderZone,from=Number(piece.dataset.orderPosition),to=from+(event.key==='ArrowRight'?1:-1);
+ event.preventDefault();if(reorderHand(zone,from,to))app.querySelector(`.hand-piece[data-order-zone="${zone}"][data-order-position="${to}"] button`)?.focus();
+});
 // Capture private table moves so they cannot mutate local snapshots or trigger the bot.
 app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
@@ -471,7 +577,7 @@ app.addEventListener('click',event=>{
  if(action==='dismiss'&&event.target!==control)return;
  if(['home','scroll-games','avatars','toggle-sound','close','dismiss','choose-avatar','start','restart','rules','next-round'].includes(action)) {
    switch(action){
-     case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;render();break;
+     case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
      case 'avatars':ui.modal='avatars';sound();render();break;
      case 'rules':ui.modal='rules';sound();render();break;
