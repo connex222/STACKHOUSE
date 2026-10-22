@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - README_PHASE18.md
+      - .github/workflows/import-produced-audio.yml
 permissions:
   contents: write
 jobs:
@@ -20,6 +21,8 @@ jobs:
           curl -fSL --retry 3 'https://mirelo.ai/dl/qx727s6why2xvct08p1cnsaa718graen/0?k=8eeMucQY332nV-FU' -o assets/audio/masters/mirelo-victory.mp3
           curl -fSL --retry 3 'https://api.sonilo.com/files/c2Z4LXJlc3VsdHMvN2E2OTJlZmEtZDE0ZS00MmE4LTlkM2YtMTkxYjEwNWQyOWVmL2F1ZGlvLm00YQ.7_4su6x2ZI3u-meePnjyMQ9Vdd3_iVt8UXZci05fO4c/audio.m4a' -o assets/audio/masters/sonilo-table-foley.m4a
           curl -fSL --retry 3 'https://api.sonilo.com/files/c2Z4LXJlc3VsdHMvYzVmYzdkNjItZTVhMi00NDEyLWFlYzQtODlmMmE3MDJlMTVlL2F1ZGlvLm00YQ.EEakkRul9fZ820gz9Fq3eu_wjRp71qVnKCN80jXUHQ4/audio.m4a' -o assets/audio/masters/sonilo-ui-rewards.m4a
+      - name: Install audio tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Render clean Mirelo sound events
         run: |
           set -euo pipefail
