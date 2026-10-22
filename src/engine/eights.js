@@ -9,12 +9,14 @@ export function eightDraw(input){const s=clone(input);if(s.winner!==null||s.drew
 export function eightPass(input){const s=clone(input);if(s.winner!==null||!s.drew)return {error:'You must draw before passing.'};s.active=1-s.active;s.drew=false;s.turn++;s.log.unshift(`${s.players[1-s.active].name} passed.`);return {state:s};}
 // Choose a playable card without inspecting the human player's hidden hand.
 // Keep wild eights until needed, then favour a suit represented in our hand.
-export function chooseEightBotMove(state){
+export function chooseEightBotMove(state,difficulty='standard'){
  const hand=state.players[1].hand;
  const choices=hand.map((card,i)=>({card,i})).filter(x=>eightCanPlay(x.card,state));
  if(!choices.length)return null;
+ if(difficulty==='easy'){const first=choices[0];return {...first,suit:first.card.value===8?'hearts':null};}
  const natural=choices.filter(x=>x.card.value!==8);
  const pool=natural.length?natural:choices;
+ if(difficulty==='expert'&&hand.length===1){const last=choices[0];return {...last,suit:last.card.value===8?'hearts':null};}
  const ranked=pool.map(option=>{
   const remaining=hand.filter((_,i)=>i!==option.i);
   const preferred=option.card.value===8?
@@ -22,15 +24,15 @@ export function chooseEightBotMove(state){
   const playedSuit=preferred??option.card.suit;
   const follow=remaining.filter(c=>c.suit===playedSuit).length;
   const highCard=option.card.value===8?0:option.card.value;
-  return {...option,suit:preferred,score:follow*20+highCard};
+  return {...option,suit:preferred,score:follow*20+highCard+(difficulty==='expert'?remaining.filter(c=>c.value===option.card.value).length*7:0)};
  });
  ranked.sort((a,b)=>b.score-a.score||a.i-b.i);
  return ranked[0];
 }
-export function runEightBot(input){
+export function runEightBot(input,difficulty='standard'){
  let s=clone(input);if(s.active!==1||s.winner!==null)return s;
- let pick=chooseEightBotMove(s);
- if(!pick){const r=eightDraw(s);if(!r.error)s=r.state;pick=chooseEightBotMove(s);}
+ let pick=chooseEightBotMove(s,difficulty);
+ if(!pick){const r=eightDraw(s);if(!r.error)s=r.state;pick=chooseEightBotMove(s,difficulty);}
  if(pick){const result=eightPlay(s,pick.i,pick.suit);return result.error?s:result.state;}
  const result=eightPass(s);return result.error?s:result.state;
 }

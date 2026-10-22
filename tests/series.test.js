@@ -25,7 +25,7 @@ test('series view contains public results only, never cards or access credential
  // Narrow both original hands to a valid finishing play, using actual server move path.
  const card=room.game.players[0].hand[0];room.game.players[0].hand=[card];
  room.game.activeSuit=card.suit;
- const result=await store.move(a.code,a.token,{type:'eight-play',index:0,revision:store.view(a.code,a.token).revision});
+ const result=await store.move(a.code,a.token,{type:'eight-play',index:0,suit:card.value===8?'hearts':null,revision:store.view(a.code,a.token).revision});
  assert.equal(result.game.winner,0);
  assert.deepEqual(result.series.wins,[1,0]);
  const seen=store.view(a.code,b.token);

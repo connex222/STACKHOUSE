@@ -108,14 +108,15 @@ export function discardSequenceCard(input, handIndex, discardIndex) {
   drawToFive(state);
   return { state };
 }
-export function runSequenceBot(input) {
+export function runSequenceBot(input,difficulty='standard') {
   let state = clone(input);
   if (state.active !== 1 || state.winner !== null) return state;
   for (let moves = 0; moves < 65; moves += 1) {
     const playable = sequenceSources(state).flatMap(source =>
       sequencePileTargets(state,source.card).map(target => ({ ...source, target })));
     if (!playable.length) break;
-    const selected = playable.find(move => move.type === 'stock')
+    const selected = (difficulty==='easy'?playable.find(move=>move.type==='hand'&&!move.card.wild):null)
+      ?? playable.find(move => move.type === 'stock')
       ?? playable.find(move => move.type === 'discard')
       ?? playable.find(move => move.type === 'hand' && !move.card.wild)
       ?? playable[0];
@@ -129,8 +130,9 @@ export function runSequenceBot(input) {
     const bestIndex = hand.reduce((best,card,index)=>
       (card.wild ? -1 : card.value) > (hand[best].wild ? -1 : hand[best].value) ? index : best, 0);
     const piles = state.players[1].discards;
-    const shortest = piles.map(p=>p.length).indexOf(Math.min(...piles.map(p=>p.length)));
-    return discardSequenceCard(state,bestIndex,shortest).state;
+    const shortest = difficulty==='expert' ? piles.findIndex(p=>!p.length) : -1;
+    const finalPile=shortest>=0?shortest:piles.map(p=>p.length).indexOf(Math.min(...piles.map(p=>p.length)));
+    return discardSequenceCard(state,bestIndex,finalPile).state;
   }
   state.active = 0;
   drawToFive(state);

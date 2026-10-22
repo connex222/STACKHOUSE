@@ -97,3 +97,18 @@ test('HTTP integration: series scoreboard stays synchronised on both players and
   assert.match((await solo.text()).slice(0,700),/Stackhouse Social/);
  }finally{await close();}
 });
+
+test('HTTP integration: mixed games-night room is opt-in, reflected on both phones, and rejects invalid format',async()=>{
+ const {base,close}=await serverFixture();
+ try{
+  const invalid=await post(`${base}/api/rooms`,{mode:'eight-shift',format:'forged',name:'Alice',avatar:1});
+  assert.equal(invalid.status,400);
+  const room=await post(`${base}/api/rooms`,{mode:'eight-shift',format:'mixed',name:'Alice',avatar:1});
+  assert.equal(room.status,201);assert.equal(room.data.view.series.format,'mixed');
+  const joined=await post(`${base}/api/rooms/${room.data.code}/join`,{name:'Bob',avatar:2});
+  assert.equal(joined.status,200);
+  assert.equal(joined.data.view.series.format,'mixed');
+  assert.equal(joined.data.view.series.nextMode,'stack-run');
+  assert.equal(joined.data.view.mode,'eight-shift');
+ }finally{await close();}
+});

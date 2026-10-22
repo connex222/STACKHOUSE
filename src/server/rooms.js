@@ -8,6 +8,7 @@ import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
 import { createLowGame, lowDraw, lowReplace, lowFlip, lowNextRound } from '../engine/lowcard.js';
 import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eights.js';
 import {createSeries,ensureSeries,recordMatchResult,beginNextGame,publicSeries} from './series.js';
+import {tournamentFormat} from './tournament.js';
 
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
 const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
@@ -97,7 +98,7 @@ export class RoomStore {
     try {
       const parsed=JSON.parse(await readFile(this.storageFile,'utf8'));
       for(const record of parsed.rooms ?? []) {
-        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) {ensureSeries(record);record.recentActions??=[];record.rematchVotes??=[false,false];this.rooms.set(record.code,record);}
+        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) {record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=[false,false];this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
@@ -134,14 +135,15 @@ export class RoomStore {
     if(seat<0)throw Error('Access denied. That session does not belong to this room.');
     return {room,seat};
   }
-  async create({mode,name,avatar}) {
+  async create({mode,name,avatar,format='single'}) {
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
     if(!MODES.has(mode)) throw Error('Choose one of the available games.');
+    format=tournamentFormat(format);
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[],gameNumber:1,series:createSeries()};
+    const room={code,mode,startMode:mode,format,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[],gameNumber:1,series:createSeries()};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
   }
   createGame(mode,seed) {
@@ -170,7 +172,7 @@ export class RoomStore {
     const {room,seat}=this._auth(code,credential);
     return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
-      storage:this.storageFile?'configured':'memory-only'};
+      storage:this.storageFile?'filesystem-only':'memory-only'};
   }
   async move(code,credential,action) {
     const {room,seat}=this._auth(code,credential);

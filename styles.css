@@ -169,3 +169,10 @@
 .sidebar>.series-board{margin:0}.sidebar .series-scores{gap:8px}.sidebar .series-scores>div:not(.series-vs){min-width:70px}.sidebar .series-heading{display:block}
 @media(max-width:600px){.series-board{padding:11px}.series-heading{font-size:10px}.series-scores strong{font-size:24px}.series-scores span{font-size:12px}.series-foot{font-size:10px}}
 .tile-trophy{color:#ffe2a1!important;border-color:#c3a466!important;font-weight:800}
+
+/* Phase 10: accessible in-lobby bot difficulty controls */
+.bot-level-section{max-width:1200px;margin:0 auto 2rem;padding:1rem 1.3rem;border:1px solid rgba(202,175,105,.32);border-radius:15px;background:rgba(6,32,34,.92);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.bot-level-section label{font-size:1rem;font-weight:800;color:#f2d89b}
+.bot-level-section .bot-level-select{max-width:200px;min-height:44px}
+.bot-level-section p{width:100%;margin:0;color:#bdcdca;font-size:.85rem}
+@media(max-width:600px){.bot-level-section{margin:0 1rem 1rem;padding:1rem}.bot-level-section .bot-level-select{flex:1;min-width:150px}}

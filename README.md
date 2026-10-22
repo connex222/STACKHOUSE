@@ -1,3 +1,9 @@
+# STACKHOUSE SOCIAL — Phase 10: Games Night Mix (v1.0.0)
+
+See [Phase 10 release notes](README_PHASE10.md) for mixed-game tournaments, selectable bot challenge levels and production limitations.
+
+---
+
 # STACKHOUSE SOCIAL — Phase 9: Games Night Series (v0.9.0)
 
 See [Phase 9 release notes](README_PHASE9.md) for match-series scoring, solo records and improved bot play.

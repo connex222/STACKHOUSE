@@ -27,7 +27,9 @@ const games = [
  {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
 ];
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
-const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
+const allowedBotLevels=['easy','standard','expert'];
+const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
+const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
   soundOn:localStorage.getItem('stackhouse.sound')==='true',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
@@ -164,7 +166,7 @@ function header() {
   const ava=asset(ui.avatarId);
   return `<header class="site-header"><button class="brand" data-action="home" aria-label="Stackhouse Social home">
     <img src="/assets/logo.webp" alt="" width="54" height="54"><span class="brand-word">STACKHOUSE <small>SOCIAL</small></span></button>
-    <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Arrange hands'}</span>
+    <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Games Night Mix'}</span>
       <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
       <button data-action="toggle-sound" class="icon-button" aria-label="${ui.soundOn?'Mute':'Enable'} game sounds" title="${ui.soundOn?'Mute':'Enable'} sounds">${icon(ui.soundOn?'sound':'mute',20)}</button>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
@@ -181,6 +183,7 @@ function homeScreen() {
      <div class="hero-highlights"><div><b>10</b><small>PLAYABLE TABLES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>${soloSummary.wins}</b><small>SOLO WINS ON THIS DEVICE</small></div></div>
    </div>
  </section>
+ <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Selectable difficulty for Stack Run, Malice Duel, Number Ladder and Eight Shift. Other tables retain their standard bot.</p></section>
  <section id="games" class="game-collection"><div class="section-heading"><div><div class="eyebrow">THE GAME COLLECTION</div><h2>Pick your next obsession.</h2><p>Easy to learn. Hard to put down. Each table has its own rules.</p></div><span class="section-pill">WAVES 1–3 · TEN GAMES</span></div>
  <div class="game-grid">${games.map((g,i)=>`<article class="game-tile art-${g.art}"><div class="tile-art"><span class="art-icon" aria-hidden="true">${g.icon}</span><span class="art-sequence" aria-hidden="true">${i===0?'1  2  3  4':i===1?'3 + 3 → 6':i===2?'♠ ♥ ♦ ♣':i===3?'7  8  9':i===4?'3 ★ 4 ★ 5':i===5?'10 → 40 → 60':i===6?'3 + 4 → 7':i===7?'4 4 4':i===8?'−2 0 3':'♥ 8 ♠'}</span></div>
  <div class="tile-body"><span class="tile-type">${escapeHtml(g.category)}</span><h3>${g.title}</h3><p>${g.description}</p><div class="tile-tags"><span>${g.tag}</span>${soloRecords.games[g.id]?.wins?`<span class="tile-trophy">★ ${soloRecords.games[g.id].wins} solo ${soloRecords.games[g.id].wins===1?'win':'wins'}</span>`:''}</div>
@@ -216,16 +219,17 @@ function seqDiscardPile(pile,index,owner='human') {
 function seriesBoard(){
  if(!isOnline()||!ui.online.view?.series)return '';
  const series=ui.online.view.series,seat=ui.online.seat,myScore=series.wins[seat],theirScore=series.wins[1-seat],champion=series.champion;
- const result=champion===null?'First to three wins':champion===seat?'YOU ARE THE SERIES CHAMPION':`${escapeHtml(opponentName())} WINS THE SERIES`;
+ const result=champion===null?(series.format==='mixed'?'Games Night Mix · first to three wins':'First to three wins'):champion===seat?'YOU ARE THE SERIES CHAMPION':`${escapeHtml(opponentName())} WINS THE SERIES`;
  return `<section class="series-board" aria-label="Games night series scoreboard"><div class="series-heading"><span>★ GAMES NIGHT · SERIES ${series.number}</span><strong>${result}</strong></div>
  <div class="series-scores"><div><small>You</small><strong>${myScore}</strong><span>${'●'.repeat(myScore)}${'○'.repeat(Math.max(0,series.target-myScore))}</span></div><div class="series-vs">VS</div><div><small>${escapeHtml(opponentName())}</small><strong>${theirScore}</strong><span>${'●'.repeat(theirScore)}${'○'.repeat(Math.max(0,series.target-theirScore))}</span></div></div>
- <p class="series-foot">${series.played} finished ${series.played===1?'match':'matches'} · ${series.draws} ${series.draws===1?'draw':'draws'}${series.history.length?` · Recent results: ${series.history.slice(0,5).map(row=>row.winner===-1?'Draw':row.winner===seat?'You':'Opponent').join(' · ')}`:''}</p></section>`;
+ <p class="series-foot">${series.played} finished ${series.played===1?'match':'matches'} · ${series.draws} ${series.draws===1?'draw':'draws'}${series.history.length?` · Recent results: ${series.history.slice(0,5).map(row=>`${row.mode?`${games.find(g=>g.id===row.mode)?.title||'Table'}: `:''}${row.winner===-1?'Draw':row.winner===seat?'You':'Opponent'}`).join(' · ')}`:''}</p></section>`;
 }
 function rematchControl() {
  if(!isOnline() || ui.game?.winner===null)return '';
  const votes=ui.online.view?.rematchVotes??[false,false],requested=Boolean(votes[ui.online.seat]),opponent=Boolean(votes[1-ui.online.seat]);
- const seriesFinished=ui.online.view?.series?.champion!==null&&ui.online.view?.series?.champion!==undefined,again=seriesFinished?'new series':'rematch';
- return `<div class="rematch-controls" role="status"><span>${requested?(opponent?'Starting the next match…':'Waiting for your friend to agree'):(opponent?'Your friend wants another game.':`Play another ${again} with the same opponent?`)}</span><button class="btn ${requested?'btn-outline':'btn-primary'}" data-action="${requested?'rematch-cancel':'rematch-request'}">${requested?'Cancel request':`Request ${again}`}</button></div>`;
+ const series=ui.online.view?.series,seriesFinished=series?.champion!==null&&series?.champion!==undefined,again=seriesFinished?'new series':'rematch';
+ const nextTable=series?.format==='mixed'?` Next up: ${escapeHtml(games.find(g=>g.id===series.nextMode)?.title||'next table')}.`:'';
+ return `<div class="rematch-controls" role="status"><span>${requested?(opponent?'Starting the next match…':'Waiting for your friend to agree'):(opponent?'Your friend wants another game.':`Play another ${again} with the same opponent?${nextTable}`)}</span><button class="btn ${requested?'btn-outline':'btn-primary'}" data-action="${requested?'rematch-cancel':'rematch-request'}">${requested?'Cancel request':`Request ${again}`}</button></div>`;
 }
 function turnNotice(){
  if(!isOnline()||!ui.game)return '';
@@ -430,7 +434,7 @@ function render(){
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 9</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 10</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
  ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  animateTable(beforeRects,handChanged);
  lastMotionSignature=motionSignature;
@@ -449,7 +453,7 @@ function checkBotTurn(){
  if(isOnline())return;
  if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
  const previous=ui.game;
- ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game):ui.game.kind==='rack'?runRackBot(ui.game):ui.game.kind==='tiles'?runTileBot(ui.game):ui.game.kind==='low'?runLowBot(ui.game):ui.game.kind==='eights'?runEightBot(ui.game):runContractBot(ui.game);
+ ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game):ui.game.kind==='low'?runLowBot(ui.game):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game);
  showMoment(readGameBeat(previous,ui.game));
  saveSolo();render();
 }
@@ -474,7 +478,7 @@ function stopOnline() {
 function roomScreen() {
   if(ui.online && ui.online.view.status==='waiting') {
     const room=ui.online.view;
-    return `<main class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · WAITING FOR A FRIEND</div>
+    return `<main class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · ${room.series?.format==='mixed'?'GAMES NIGHT MIX':'SINGLE GAME'} · WAITING FOR A FRIEND</div>
     <h1>Your table is ready.</h1><p>Share the private invite with one friend. Their phone will receive its own cards and turns.</p>
     <div class="room-code" aria-label="Room code ${room.code}">${room.code}</div>
     <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}<div class="room-player room-empty">${icon('people',25)}<b>Waiting for player two</b><span>The game starts when they join</span></div></div>
@@ -488,7 +492,7 @@ function roomScreen() {
     <input id="room-name" class="room-input" maxlength="24" autocomplete="nickname" placeholder="Your name" value="${escapeHtml(ui.roomName)}">
     ${joining?`<label class="room-label" for="room-code">SIX-CHARACTER ROOM CODE</label>
       <input id="room-code" class="room-input room-code-input" maxlength="6" autocomplete="off" spellcheck="false" value="${escapeHtml(ui.roomCode)}">`
-      :`<label class="room-label" for="room-game">CHOOSE YOUR GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select>`}
+      :`<label class="room-label" for="room-game">CHOOSE YOUR FIRST GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select><label class="room-label" for="room-format">GAMES NIGHT FORMAT</label><select id="room-format" class="room-input"><option value="single" ${ui.roomFormat==='single'?'selected':''}>One game · first to three wins</option><option value="mixed" ${ui.roomFormat==='mixed'?'selected':''}>Games Night Mix · new game each match</option></select><p class="room-small">Mix rotates through all ten games. Both friends must accept each new match.</p>`}
     <div class="room-profile"><img src="${asset(ui.avatarId).image}" alt=""> <span>Playing as <b>${asset(ui.avatarId).name}</b></span><button class="btn btn-outline" data-action="avatars">Change</button></div>
     <button class="btn btn-primary room-submit" data-action="${joining?'room-join':'room-host'}">${joining?'Join private table':'Create private table'} ${icon('arrow')}</button>
     <button class="btn btn-ghost" data-action="room-switch">${joining?'Create a room instead':'I have an invite code'}</button>
@@ -506,6 +510,7 @@ function syncRoom(view) {
   if(ui.online.view && view.revision<ui.online.view.revision)return; // Never roll back newer state on a slow stream.
   const changed=ui.online.view?.revision!==view.revision;
   ui.online.view=view;
+  if(ui.mode!==view.mode)resetArrangement();
   ui.mode=view.mode;
   ui.avatarId=view.players[view.seat]?.avatar??ui.avatarId;
   localStorage.setItem('stackhouse.avatar',String(ui.avatarId));
@@ -596,7 +601,9 @@ async function roomButton(action,control) {
     ui.roomName=name;localStorage.setItem('stackhouse.nickname',name||'');
     if(action==='room-host') {
       const mode=document.getElementById('room-game').value;
-      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar}});
+      const format=document.getElementById('room-format')?.value||'single';
+      ui.roomFormat=format;
+      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar,format}});
       connectRoom(result.code,result.token,result.view);
     } else if(action==='room-join') {
       const code=(document.getElementById('room-code')?.value||'').trim().toUpperCase();
@@ -808,3 +815,11 @@ document.addEventListener?.('visibilitychange',syncAmbience);
 window.addEventListener?.('pagehide',()=>{ambienceVoices.forEach(v=>{try{v.stop();}catch{}});ambienceVoices=[];ambienceGain=null;});
 render();
 restoreRoom();
+
+app.addEventListener('change',event=>{
+ if(event.target?.id==='bot-level'&&allowedBotLevels.includes(event.target.value)){
+  ui.botDifficulty=event.target.value;
+  try{localStorage.setItem('stackhouse.botDifficulty',ui.botDifficulty);}catch{}
+  toast(`House Bot difficulty: ${ui.botDifficulty}. Available on four tables.`);
+ }
+});
