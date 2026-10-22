@@ -32,7 +32,7 @@ const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const allowedBotLevels=['easy','standard','expert'];
 const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')==='true',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
+  soundOn:localStorage.getItem('stackhouse.sound')!=='false',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
 function savedSolo(){try{return decodeSoloSave(localStorage.getItem(SOLO_SAVE_KEY));}catch{return null;}}
@@ -89,7 +89,7 @@ const asset=id=>avatars.find(a=>a.id===id)||avatars[0];
 const gameInfo=()=>games.find(g=>g.id===ui.mode)||games[0];
 const escapeHtml=(s)=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const cls=(...names)=>names.filter(Boolean).join(' ');
-const sampleAudio=createGameAudio();
+const sampleAudio=createGameAudio({onPlaybackError(type){playFallbackSound(type);}});
 let audioContext;
 let ambienceVoices=[];
 let ambienceGain=null;
@@ -101,9 +101,13 @@ function contextForAudio(){
  return audioContext;
 }
 // Soft procedural table sounds: no downloads, no large sound files or autoplay.
-function sound(type='tap') {
+function sound(type='tap',force=false) {
  if(!ui.soundOn)return;
- if(sampleAudio.play(type))return;
+ if(sampleAudio.play(type,{force}))return;
+ playFallbackSound(type);
+}
+function playFallbackSound(type='tap') {
+ if(!ui.soundOn)return;
  try {
   const ctx=contextForAudio();if(!ctx)return;
   const notes={tap:[392],select:[523],card:[330,495],deal:[262,392,523],draw:[294,440],
@@ -185,7 +189,8 @@ function header() {
     <img src="/assets/logo.webp" alt="" width="54" height="54"><span class="brand-word">STACKHOUSE <small>SOCIAL</small></span></button>
     <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Games Night Mix'}</span>
       <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
-      <button data-action="toggle-sound" class="icon-button" aria-label="${ui.soundOn?'Mute':'Enable'} game sounds" title="${ui.soundOn?'Mute':'Enable'} sounds">${icon(ui.soundOn?'sound':'mute',20)}</button>
+      <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
+      <button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a sample sound">${icon('play',14)} Test</button>
       <button data-action="avatars" class="account-button"><img src="${ava.image}" alt=""><span>My avatar</span><span class="small-chevron">⌄</span></button>
     </nav></header>`;
 }
@@ -846,14 +851,15 @@ app.addEventListener('click',event=>{
  if(!control)return;
  const action=control.dataset.action;
  if(action==='dismiss'&&event.target!==control)return;
- if(['home','scroll-games','avatars','toggle-sound','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
+ if(['home','scroll-games','avatars','toggle-sound','test-sound','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
    switch(action){
      case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
      case 'avatars':ui.modal='avatars';sound();render();break;
      case 'rules':ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
-     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);sound();render();break;
+     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn)sound('win',true);render();break;
+     case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}sound('win',true);render();break;
      case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;

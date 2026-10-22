@@ -6,8 +6,8 @@ import { RoomStore } from './src/server/rooms.js';
 import { connectPostgresSnapshot } from './src/server/postgres-storage.js';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
-const allowed=new Set(['.html','.css','.js','.webp','.png','.json','.svg','.ico','.txt']);
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.webp':'image/webp','.png':'image/png','.json':'application/json','.svg':'image/svg+xml','.ico':'image/x-icon','.txt':'text/plain'};
+const allowed=new Set(['.html','.css','.js','.webp','.png','.json','.svg','.ico','.txt','.mp3','.m4a']);
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.webp':'image/webp','.png':'image/png','.json':'application/json','.svg':'image/svg+xml','.ico':'image/x-icon','.txt':'text/plain','.mp3':'audio/mpeg','.m4a':'audio/mp4'};
 const port=Number(process.env.PORT||4173);
 if(process.env.DATABASE_URL && process.env.ROOM_DATA_FILE)throw Error('Use DATABASE_URL or ROOM_DATA_FILE, not both.');
 const snapshotStore=process.env.DATABASE_URL?await connectPostgresSnapshot(process.env.DATABASE_URL):null;

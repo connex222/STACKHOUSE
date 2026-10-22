@@ -611,3 +611,8 @@ See [Phase 11 notes](#phase-11) for the opt-in PostgreSQL durable-room backend, 
 
 See [Phase 18 notes](#phase-18) for the sound bank, Sonilo/Mirelo production provenance and provider-asset import status.
 
+
+
+## Audio playback hotfix — 22 October 2026
+
+A production defect made the web server reject `.mp3` requests with HTTP 403 even though game logic correctly requested the packaged sounds. The static asset allow-list now admits `.mp3` and `.m4a`, served as `audio/mpeg` and `audio/mp4`. Audio playback failures are reported to the existing procedural tone fallback rather than silently swallowed. Gameplay audio now defaults to on for first-time visitors, but preserves a returning player's explicit mute preference; browser autoplay restrictions still require a click or other user interaction. The header displays **Sound on/off** and offers a **Test** button, which enables audio and plays a sample. Sound samples are intentionally short and at moderate volume. Existing generated Sonilo and Mirelo masters remain untouched.
