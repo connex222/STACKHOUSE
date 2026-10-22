@@ -5,20 +5,21 @@
  */
 export const SERIES_TARGET = 3;
 import {nextTournamentMode} from './tournament.js';
-export function createSeries(number=1) {
-  return {number,wins:[0,0],draws:0,played:0,history:[],reportedGame:0};
+export function createSeries(number=1,seats=2) {
+  return {number,wins:Array(seats).fill(0),draws:0,played:0,history:[],reportedGame:0};
 }
 export function ensureSeries(room) {
   room.gameNumber=Number.isSafeInteger(room.gameNumber)&&room.gameNumber>0?room.gameNumber:1;
-  if(!room.series || !Array.isArray(room.series.wins) || room.series.wins.length!==2)room.series=createSeries();
+  if(!room.series || !Array.isArray(room.series.wins) || room.series.wins.length!==((room.status==='waiting'?room.maxPlayers??2:room.players?.length??2)))room.series=createSeries(1,(room.status==='waiting'?room.maxPlayers??2:room.players?.length??2));
   return room.series;
 }
 export function seriesChampion(series) {
-  return series.wins[0]>=SERIES_TARGET?0:series.wins[1]>=SERIES_TARGET?1:null;
+  const champion=series.wins.findIndex(wins=>wins>=SERIES_TARGET);
+  return champion<0?null:champion;
 }
 export function recordMatchResult(room) {
   const series=ensureSeries(room), winner=room.game?.winner;
-  if(![-1,0,1].includes(winner)||series.reportedGame>=room.gameNumber)return false;
+  if((!Number.isInteger(winner)||winner<-1||winner>=series.wins.length)||series.reportedGame>=room.gameNumber)return false;
   if(seriesChampion(series)!==null)return false;
   if(winner===-1)series.draws++;else series.wins[winner]++;
   series.played++;
@@ -30,7 +31,7 @@ export function recordMatchResult(room) {
 export function beginNextGame(room) {
   const series=ensureSeries(room);
   // A completed series is reset only after BOTH players accept the new match.
-  if(seriesChampion(series)!==null)room.series=createSeries(series.number+1);
+  if(seriesChampion(series)!==null)room.series=createSeries(series.number+1,room.players?.length??series.wins.length);
   room.gameNumber++;
   if(room.format==='mixed')room.mode=nextTournamentMode(room.startMode,room.series.played);
 }

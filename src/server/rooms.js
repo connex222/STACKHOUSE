@@ -10,6 +10,7 @@ import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eigh
 import {createSeries,ensureSeries,recordMatchResult,beginNextGame,publicSeries} from './series.js';
 import {tournamentFormat} from './tournament.js';
 
+const GROUP_MODES = new Set(['eight-shift','stack-run','malice-duel','tile-royale']);
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
 const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -61,7 +62,8 @@ const copyPile = (cards, showTop) => cards.length ? [...Array(cards.length-1).fi
 /** Project one seat's view. No opponent hand, hidden stock or draw card identities are sent. */
 export function projectGame(game, seat) {
   if(!game) return null;
-  const other = 1-seat;
+  const order=[seat,...game.players.map((_,i)=>i).filter(i=>i!==seat)];
+  const relative=index=>index===null||index===undefined||index===-1?index:order.indexOf(index);
   const adapt = (player, owned) => game.kind==='tiles' ? ({name:player.name,rack:owned?player.rack:Array(player.rack.length).fill(null)})
     : game.kind==='low' ? ({name:player.name,score:player.score,grid:player.grid.map(c=>c.revealed||c.cleared?{id:c.id,value:c.cleared?null:c.value,revealed:true,cleared:c.cleared}:{id:null,value:null,revealed:false,cleared:false})})
     : game.kind==='eights' ? ({name:player.name,hand:owned?player.hand:Array(player.hand.length).fill(null)})
@@ -72,10 +74,10 @@ export function projectGame(game, seat) {
     discards:player.discards.map(p=>copyPile(p,true))
   }) : ({name:player.name, mission:player.mission,score:player.score,
     hand:owned ? player.hand : Array(player.hand.length).fill(null)});
-  const shared = {kind:game.kind,mode:game.mode,active:game.active===seat?0:1,
-    winner:game.winner===null?null:game.winner===-1?-1:(game.winner===seat?0:1),
-    roundWinner:game.roundWinner===undefined?undefined:game.roundWinner===null?null:game.roundWinner===-1?-1:(game.roundWinner===seat?0:1),
-    players:[adapt(game.players[seat],true),adapt(game.players[other],false)],
+  const shared = {kind:game.kind,mode:game.mode,active:relative(game.active),
+    winner:relative(game.winner),
+    roundWinner:relative(game.roundWinner),
+    players:order.map(i=>adapt(game.players[i],i===seat)),
     log:game.log.slice(0,12)};
   if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length}};
   if(game.kind==='low')return {...shared,round:game.round,step:game.step,held:game.active===seat?game.held:null,drawnFrom:game.active===seat?game.drawnFrom:null,closingSeat:game.closingSeat===null?null:(game.closingSeat===seat?0:1),draw:{length:game.draw.length},discard:game.discard.slice(-1)};
@@ -102,7 +104,9 @@ export class RoomStore {
       if(!stored) return;
       const parsed=stored;
       for(const record of parsed.rooms ?? []) {
-        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) {record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=[false,false];this.rooms.set(record.code,record);}
+        if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=(record.maxPlayers??2) && this.now()-record.updated<7*86400e3) {record.maxPlayers??=2;
+          if(record.maxPlayers!==2&&(!GROUP_MODES.has(record.mode)||record.format==='mixed'||record.maxPlayers>6))continue;
+          record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=Array(record.players.length).fill(false);this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
@@ -161,46 +165,64 @@ export class RoomStore {
     if(seat<0)throw Error('Access denied. That session does not belong to this room.');
     return {room,seat};
   }
-  async create({mode,name,avatar,format='single'}) {
+  async create({mode,name,avatar,format='single',maxPlayers=2}) {
     return this._exclusive(async()=>{
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
     if(!MODES.has(mode)) throw Error('Choose one of the available games.');
     format=tournamentFormat(format);
+    if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>6)throw Error('Choose between 2 and 6 players.');
+    if(maxPlayers>2&&(!GROUP_MODES.has(mode)||format!=='single'))throw Error('Group tables support Eight Shift, Stack Run, Malice Duel and Tile Royale in single-game mode.');
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,startMode:mode,format,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[],gameNumber:1,series:createSeries()};
+    const room={code,mode,startMode:mode,format,maxPlayers,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
     });
   }
-  createGame(mode,seed) {
-    if(mode==='tile-royale')return createTileGame({mode,seed});
+  createGame(mode,seed,playerCount=2) {
+    if(mode==='tile-royale')return createTileGame({mode,seed,playerCount});
     if(mode==='low-glow')return createLowGame({mode,seed});
-    if(mode==='eight-shift')return createEightGame({mode,seed});
-    if(mode==='stack-run'||mode==='malice-duel')return createSequenceGame({mode,seed});
+    if(mode==='eight-shift')return createEightGame({mode,seed,playerCount});
+    if(mode==='stack-run'||mode==='malice-duel')return createSequenceGame({mode,seed,playerCount});
     if(mode==='number-ladder')return createRackGame({mode,seed});
     return createContractGame({mode,seed});
   }
+  // Called only while a room is waiting. Host can launch a group early once 3 seats are filled.
+  _beginRoom(room) {
+    const seed=randomBytes(4).readUInt32BE();
+    room.game=securelyDeal(this.createGame(room.mode,seed,room.players.length));
+    room.game.players.forEach((p,i)=>{p.name=room.players[i].name;});
+    room.game.log=[`Private table ready: ${room.players.map(p=>p.name).join(', ')}.`];
+    room.status='playing';room.rematchVotes=Array(room.players.length).fill(false);
+    room.series=createSeries(1,room.players.length);
+  }
   async join(code,{name,avatar}) {
     return this._exclusive(async()=>{
-    const room=this._find(code);
-    if(room.status!=='waiting'||room.players.length!==1)throw Error('This room is not accepting players.');
-    const player={name:safeName(name),avatar:safeAvatar(avatar)};
-    const credential=token();player.tokenHash=hash(credential);
-    room.players.push(player);room.status='playing';room.updated=this.now();room.revision++;
-    const seed=randomBytes(4).readUInt32BE();
-    room.game=securelyDeal(this.createGame(room.mode,seed));
-    room.game.players[0].name=room.players[0].name;
-    room.game.players[1].name=room.players[1].name;
-    room.game.log=[`Private table ready: ${room.players[0].name} versus ${room.players[1].name}.`];
-    await this.save();this.notify(code);
-    return {code,token:credential,seat:1,view:this.view(code,credential)};
+      const room=this._find(code);
+      if(room.status!=='waiting'||room.players.length>=room.maxPlayers)throw Error('This room is not accepting players.');
+      const player={name:safeName(name),avatar:safeAvatar(avatar)};
+      const credential=token();player.tokenHash=hash(credential);
+      const seat=room.players.length;room.players.push(player);
+      if(room.players.length===room.maxPlayers)this._beginRoom(room);
+      room.updated=this.now();room.revision++;
+      await this.save();this.notify(code);
+      return {code,token:credential,seat,view:this.view(code,credential)};
+    });
+  }
+  async start(code,credential) {
+    return this._exclusive(async()=>{
+      const {room,seat}=this._auth(code,credential);
+      if(seat!==0)throw Error('Only the host can start the table.');
+      if(room.status!=='waiting'||room.maxPlayers===2||room.players.length<3)throw Error('Wait for at least three players before starting.');
+      this._beginRoom(room);room.revision++;room.updated=this.now();
+      await this.save();this.notify(code);
+      return this.view(code,credential);
     });
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
-    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
+    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageKind};
   }
@@ -234,16 +256,16 @@ export class RoomStore {
     if(action.type==='rematch-request'||action.type==='rematch-cancel') {
       if(game.winner===null)throw Error('Finish the match before requesting a rematch.');
       recordMatchResult(room); // Backfill completed legacy rooms on their first rematch vote.
-      const votes=room.rematchVotes??[false,false];
+      const votes=room.rematchVotes??Array(room.players.length).fill(false);
       const choice=action.type==='rematch-request';
       if(votes[seat]===choice)throw Error(choice?'You have already requested a rematch.':'No rematch request to cancel.');
       votes[seat]=choice;room.rematchVotes=votes;
       if(votes.every(Boolean)) {
         beginNextGame(room);
-        room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE()));
+        room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE(),room.players.length));
         room.game.players.forEach((p,i)=>p.name=room.players[i].name);
-        room.game.log=[`Rematch started: ${room.players[0].name} versus ${room.players[1].name}.`];
-        room.rematchVotes=[false,false];
+        room.game.log=[`Rematch started: ${room.players.map(p=>p.name).join(', ')}.`];
+        room.rematchVotes=Array(room.players.length).fill(false);
       }
       acknowledge();room.revision++;room.updated=this.now();await this.save();this.notify(code);
       return this.view(code,credential);

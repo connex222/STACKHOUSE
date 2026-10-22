@@ -9,7 +9,8 @@ const computer = { name: 'House Bot' };
 const clone = state => structuredClone(state);
 const top = pile => pile.at(-1) ?? null;
 
-export function createSequenceGame({ mode = 'stack-run', seed = 42 } = {}) {
+export function createSequenceGame({ mode = 'stack-run', seed = 42, playerCount = 2 } = {}) {
+  if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 6) throw Error('Sequencing supports 2–6 players.');
   const rules = SETTINGS[mode];
   if (!rules) throw new Error(`Unknown sequence mode: ${mode}`);
   let nextId = 0;
@@ -19,7 +20,7 @@ export function createSequenceGame({ mode = 'stack-run', seed = 42 } = {}) {
   }
   for (let i = 0; i < rules.wilds; i += 1) deck.push({ id: `s${++nextId}`, value: 0, wild: true });
   const draw = shuffle(deck, mulberry32(seed));
-  const players = [human, computer].map(player => ({
+  const players = Array.from({length:playerCount},(_,i)=>i===0?human:i===1?computer:{name:`Player ${i+1}`}).map(player => ({
     ...player, stock: draw.splice(-rules.stock), hand: [], discards: [[],[],[],[]]
   }));
   const state = {
@@ -103,7 +104,7 @@ export function discardSequenceCard(input, handIndex, discardIndex) {
   const [card] = player.hand.splice(handIndex,1);
   player.discards[discardIndex].push(card);
   state.log.unshift(`${player.name} discarded ${card.wild ? 'wild' : card.value} and finished their turn.`);
-  state.active = 1 - state.active;
+  state.active = (state.active + 1) % state.players.length;
   state.turn += 1;
   drawToFive(state);
   return { state };

@@ -57,10 +57,11 @@ const server=createServer(async(req,res)=>{
     if(pathname.startsWith('/api/')) {
       if(limited(req))return json(res,429,{error:'Too many requests. Please try again shortly.'});
       if(req.method==='POST'&&pathname==='/api/rooms')return json(res,201,await store.create(await readJson(req)));
-      const match=pathname.match(/^\/api\/rooms\/([A-Z2-9]{6})(?:\/(join|state|actions|events))?$/);
+      const match=pathname.match(/^\/api\/rooms\/([A-Z2-9]{6})(?:\/(join|start|state|actions|events))?$/);
       if(!match)return json(res,404,{error:'Unknown API route.'});
       const [,code,route='state']=match;
       if(route==='join'&&req.method==='POST')return json(res,200,await store.join(code,await readJson(req)));
+      if(route==='start'&&req.method==='POST')return json(res,200,await store.start(code,auth(req)));
       if(route==='actions'&&req.method==='POST')return json(res,200,await store.move(code,auth(req),await readJson(req)));
       if(route==='state'&&req.method==='GET')return json(res,200,store.view(code,auth(req)));
       if(route==='events'&&req.method==='GET') {

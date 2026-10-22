@@ -1,3 +1,18 @@
+# STACKHOUSE SOCIAL — Phase 13: Group Games Night (v1.3.0)
+
+**Four real multiplayer tables now support 2–6 people:** **Eight Shift, Stack Run, Malice Duel and Tile Royale**. The other six games remain head-to-head; a Games Night Mix rotation continues to require exactly two players. See [Phase 13 release notes](README_PHASE13.md) for verified coverage, limitations and testing.
+
+- Host a room, select the supported table and seat capacity (2–6), then share the same invitation link with friends. For groups of 3–6, the host can start once at least three players are seated, or the game starts automatically when the table fills.
+- Each participant has private cards, an authenticated personal view, independent turn controls and an individual avatar. Turns cycle through all participants; a full-table rematch requires **everyone's consent**.
+- Game-night series track wins per person. Existing two-player rooms, solo bot play and established rules remain compatible.
+- Tile Royale and Low Glow now have Easy / Standard / Expert computer opponents; six games offer difficulty settings.
+- Eight Shift resolves an otherwise blocked game when nobody can draw or play; Tile Royale correctly scores tied exhausted racks as draws.
+- **Cloud permanent storage is not configured:** the existing Render service can still lose rooms during a restart. Real physical-phone acceptance has not been completed, and the graphical browser harness in this environment was blocked.
+
+Run `npm test` and `npm run build` (Node 20+). Online multiplayer requires `npm start` or a running Node server; the local `PLAY-OFFLINE.html` is bot-only.
+
+---
+
 # STACKHOUSE SOCIAL — Phase 12: multiplayer acceptance (v1.2.0)
 
 See [Phase 12 release notes](README_PHASE12.md). Automated two-client HTTP/SSE tests cover all ten games, saved-state restart rehearsal and readiness reporting. Cloud PostgreSQL storage is **not active**, and physical two-phone testing remains outstanding.
@@ -71,7 +86,7 @@ To build: `npm test`, `npm run build`, `npm run build:offline`. The latter creat
 Tests: `npm test` (including hand-order and solo-save correctness tests). Build portable offline edition: `npm run build:offline`. Browser tests were run in Chromium for drag, sorting and tap-to-arrange on all four interface types, plus narrow mobile-width rendering. Actual physical-device acceptance testing remains outstanding.
 
 
-**Ten playable original card and tile variants.** This is a phone-first private games-night collection, with 16 selectable portrait avatars, a gold-and-teal lounge, bot opponents, optional card sounds and private server-authoritative two-player rooms.
+**Ten playable original card and tile variants.** This is a phone-first private games-night collection with 16 avatars, bot opponents and private server-authoritative two-player and selected 3–6-player rooms.
 
 ## Play immediately
 

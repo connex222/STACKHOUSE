@@ -16,10 +16,24 @@ export function lowDraw(input,from='deck'){const s=clone(input);if(s.winner!==nu
 export function lowReplace(input,index){const s=clone(input);if(s.step!=='place'||s.winner!==null||s.roundWinner!==null)return {error:'Draw a card first.'};const g=s.players[s.active].grid;if(!Number.isInteger(index)||index<0||index>=12||g[index].cleared)return {error:'Choose an available grid position.'};const previous=g[index];g[index]={...s.held,revealed:true,cleared:false};s.discard.push({id:previous.id,value:previous.value});s.log.unshift(`${s.players[s.active].name} swapped a card.`);return {state:afterTurn(s)};}
 export function lowFlip(input,index){const s=clone(input);if(s.step!=='place'||s.drawnFrom!=='deck'||s.winner!==null||s.roundWinner!==null)return {error:'Only a deck draw can be discarded to reveal a card.'};const g=s.players[s.active].grid;if(!Number.isInteger(index)||index<0||index>=12||g[index].revealed||g[index].cleared)return {error:'Choose a hidden card to reveal.'};s.discard.push(s.held);g[index].revealed=true;s.log.unshift(`${s.players[s.active].name} revealed a hidden card.`);return {state:afterTurn(s)};}
 export function lowNextRound(input){const s=clone(input);if(s.roundWinner===null||s.winner!==null)return {error:'Round is not finished.'};s.round++;return {state:deal(s)};}
-export function runLowBot(input){let s=clone(input);if(s.active!==1||s.winner!==null||s.roundWinner!==null)return s;const g=s.players[1].grid;const visible=g.map((c,i)=>({...c,index:i})).filter(c=>!c.cleared&&c.revealed).sort((a,b)=>b.value-a.value);const top=s.discard.at(-1);
- const useDiscard=top&&(visible[0]?.value>top.value||top.value<=3);let r=lowDraw(s,useDiscard?'discard':'deck');if(r.error)return s;s=r.state;
+export function runLowBot(input,difficulty='standard'){let s=clone(input);if(s.active!==1||s.winner!==null||s.roundWinner!==null)return s;const g=s.players[1].grid;const visible=g.map((c,i)=>({...c,index:i})).filter(c=>!c.cleared&&c.revealed).sort((a,b)=>b.value-a.value);const top=s.discard.at(-1);
+ const useDiscard=difficulty==='easy'?false:top&&(visible[0]?.value>top.value||top.value<=3);let r=lowDraw(s,useDiscard?'discard':'deck');if(r.error)return s;s=r.state;
  const old=s.players[1].grid,highest=old.map((c,i)=>({...c,index:i})).filter(c=>!c.cleared&&c.revealed).sort((a,b)=>b.value-a.value)[0];const hidden=old.findIndex(c=>!c.revealed&&!c.cleared);
- if(highest&&highest.value>s.held.value&&(highest.value-s.held.value>2||hidden===-1))r=lowReplace(s,highest.index);
+ if(difficulty==='expert') {
+   // Use only revealed values to identify an immediately clearable column.
+   let clearing=-1;
+   for(let col=0;col<4;col++){
+    const positions=[col,col+4,col+8],faceUp=positions.filter(i=>old[i].revealed&&!old[i].cleared);
+    if(faceUp.length===2&&old[faceUp[0]].value===s.held.value&&old[faceUp[1]].value===s.held.value){
+     clearing=positions.find(i=>!old[i].cleared&&!old[i].revealed)??-1;if(clearing!==-1)break;
+    }
+   }
+   if(clearing!==-1)r=lowReplace(s,clearing);
+   else if(highest&&highest.value>s.held.value)r=lowReplace(s,highest.index);
+   else if(hidden!==-1)r=s.drawnFrom==='deck'&&s.held.value>=8?lowFlip(s,hidden):lowReplace(s,hidden);
+   else if(highest)r=lowReplace(s,highest.index);
+  }else if(difficulty==='easy')r=hidden!==-1?lowReplace(s,hidden):highest?lowReplace(s,highest.index):{error:'No available grid position.'};
+ else if(highest&&highest.value>s.held.value&&(highest.value-s.held.value>2||hidden===-1))r=lowReplace(s,highest.index);
  else if(hidden!==-1)r=s.drawnFrom==='deck'&&s.held.value>=7?lowFlip(s,hidden):lowReplace(s,hidden);
  else if(highest)r=lowReplace(s,highest.index);
  return r.error?s:r.state;

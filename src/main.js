@@ -15,21 +15,21 @@ const avatars = [
  'The Drifter','The Ace','The Maverick','The Gamer','The Duchess','The Joker','The Ranger','The Trendsetter'
 ].map((name,i)=>({id:i+1,name,image:`/assets/avatar-${String(i+1).padStart(2,'0')}.webp`}));
 const games = [
- { id:'stack-run', title:'Stack Run', category:'Sequencing / strategy', kicker:'BUILD. STACK. OUTPLAY.',description:'Climb from 1 to 12 across shared stacks. Your stockpile is the real race.',players:'2 players + bot demo', icon:'↗', art:'run',kind:'sequence',tag:'Most like Skip-Bo' },
+ { id:'stack-run', title:'Stack Run', category:'Sequencing / strategy', kicker:'BUILD. STACK. OUTPLAY.',description:'Climb from 1 to 12 across shared stacks. Your stockpile is the real race.',players:'2–6 players + bot demo', icon:'↗', art:'run',kind:'sequence',tag:'Most like Skip-Bo' },
  { id:'phase-quest', title:'Phase Quest', category:'Contracts / strategy', kicker:'TEN MISSIONS. ONE WINNER.',description:'Build sets, runs and colour groups. Every successful contract moves you forward.',players:'2 players + bot demo',icon:'✦',art:'phase',kind:'contract',tag:'Most like Phase 10' },
- { id:'malice-duel', title:'Malice Duel', category:'Competitive sequencing',kicker:'MAKE EVERY CARD COUNT.',description:'Three shared stacks, a deeper stockpile and just enough room for revenge.',players:'2 players + bot demo',icon:'♠',art:'malice',kind:'sequence',tag:'Spite & Malice inspired' },
+ { id:'malice-duel', title:'Malice Duel', category:'Competitive sequencing',kicker:'MAKE EVERY CARD COUNT.',description:'Three shared stacks, a deeper stockpile and just enough room for revenge.',players:'2–6 players + bot demo',icon:'♠',art:'malice',kind:'sequence',tag:'Spite & Malice inspired' },
  { id:'contract-club', title:'Contract Club', category:'Classic rummy contracts', kicker:'READ THE ROOM. MAKE THE MELD.',description:'Seven rising contracts, tactical discards and a race to lay the right combination.',players:'2 players + bot demo',icon:'♣',art:'contract',kind:'contract',tag:'Contract Rummy inspired' },
  { id:'crown-circuit',title:'Crown Circuit',category:'Five-suit wild-card rummy',kicker:'THE WILD RANK NEVER STAYS STILL.',description:'Eleven rising contracts, five suits, changing wild ranks, and a final royal challenge.',players:'2 players + bot demo',icon:'♛',art:'crown',kind:'contract',tag:'Five Crowns-style variant' },
  { id:'number-ladder',title:'Number Ladder',category:'Number ordering / strategy',kicker:'TEN SLOTS. ONE PERFECT ORDER.',description:'Swap one card at a time to build an ascending ladder from 1 to 60.',players:'2 players + bot demo',icon:'↟',art:'ladder',kind:'rack',tag:'Rack-O-style ordering' },
  { id:'shanghai-nights',title:'Shanghai Nights',category:'Progressive contract rummy',kicker:'SEVEN DEALS. SEVEN CHALLENGES.',description:'Seven escalating meld missions in a tactical Shanghai-inspired house variant.',players:'2 players + bot demo',icon:'✴',art:'shanghai',kind:'contract',tag:'Shanghai-style contracts' },
- {id:'tile-royale',title:'Tile Royale',category:'Tile sets and colour runs',kicker:'MAKE YOUR MARK ON THE TABLE.',description:'Form colourful sets and consecutive runs, extend table groups, and clear your rack.',players:'2 players + bot demo',icon:'▦',art:'tile',kind:'tiles',tag:'Number-tile rummy variant'},
+ {id:'tile-royale',title:'Tile Royale',category:'Tile sets and colour runs',kicker:'MAKE YOUR MARK ON THE TABLE.',description:'Form colourful sets and consecutive runs, extend table groups, and clear your rack.',players:'2–6 players + bot demo',icon:'▦',art:'tile',kind:'tiles',tag:'Number-tile rummy variant'},
  {id:'low-glow',title:'Low Glow',category:'Memory / low-score cards',kicker:'THE LOWEST SCORE WINS.',description:'Flip, swap and clear matching columns across four fast rounds.',players:'2 players + bot demo',icon:'⬡',art:'low',kind:'low',tag:'Skyjo-style house game'},
- {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
+ {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2–6 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
 ];
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const allowedBotLevels=['easy','standard','expert'];
 const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
-const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
+const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
   soundOn:localStorage.getItem('stackhouse.sound')==='true',ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
@@ -67,9 +67,15 @@ function undoHandOrder(){
  saveSolo();sound('card');render();
 }
 const isOnline=()=>Boolean(ui.online);
-const opponentProfile=()=>ui.online?.view?.players?.[1-ui.online.seat];
+const opponentProfile=()=>ui.online?.view?.players?.find((_,i)=>i!==ui.online.seat);
 const opponentName=()=>opponentProfile()?.name||'House Bot';
 const opponentImage=()=>asset(opponentProfile()?.avatar||14).image;
+const roomOpponents=()=>ui.online?.view?.players?.filter((_,i)=>i!==ui.online.seat)??[];
+function opponentRail(){
+ if(!isOnline()||roomOpponents().length<2)return '';
+ const seats=ui.online.view.players;
+ return `<div class="group-opponents" aria-label="Other players at the table">${seats.map((p,i)=>i===ui.online.seat?'':`<div class="group-opponent"><img src="${asset(p.avatar).image}" alt=""><strong>${escapeHtml(p.name)}</strong><small>${p.connected?'● Online':'○ Offline'}${ui.game?.active!==null&&ui.game?.players[ui.game.active]?.name===p.name?' · Playing':''}</small></div>`).join('')}</div>`;
+}
 const asset=id=>avatars.find(a=>a.id===id)||avatars[0];
 const gameInfo=()=>games.find(g=>g.id===ui.mode)||games[0];
 const escapeHtml=(s)=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
@@ -183,7 +189,7 @@ function homeScreen() {
      <div class="hero-highlights"><div><b>10</b><small>PLAYABLE TABLES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>${soloSummary.wins}</b><small>SOLO WINS ON THIS DEVICE</small></div></div>
    </div>
  </section>
- <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Selectable difficulty for Stack Run, Malice Duel, Number Ladder and Eight Shift. Other tables retain their standard bot.</p></section>
+ <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Selectable difficulty for Stack Run, Malice Duel, Number Ladder, Eight Shift, Tile Royale and Low Glow. Contract games retain their standard bot.</p></section>
  <section id="games" class="game-collection"><div class="section-heading"><div><div class="eyebrow">THE GAME COLLECTION</div><h2>Pick your next obsession.</h2><p>Easy to learn. Hard to put down. Each table has its own rules.</p></div><span class="section-pill">WAVES 1–3 · TEN GAMES</span></div>
  <div class="game-grid">${games.map((g,i)=>`<article class="game-tile art-${g.art}"><div class="tile-art"><span class="art-icon" aria-hidden="true">${g.icon}</span><span class="art-sequence" aria-hidden="true">${i===0?'1  2  3  4':i===1?'3 + 3 → 6':i===2?'♠ ♥ ♦ ♣':i===3?'7  8  9':i===4?'3 ★ 4 ★ 5':i===5?'10 → 40 → 60':i===6?'3 + 4 → 7':i===7?'4 4 4':i===8?'−2 0 3':'♥ 8 ♠'}</span></div>
  <div class="tile-body"><span class="tile-type">${escapeHtml(g.category)}</span><h3>${g.title}</h3><p>${g.description}</p><div class="tile-tags"><span>${g.tag}</span>${soloRecords.games[g.id]?.wins?`<span class="tile-trophy">★ ${soloRecords.games[g.id].wins} solo ${soloRecords.games[g.id].wins===1?'win':'wins'}</span>`:''}</div>
@@ -218,23 +224,30 @@ function seqDiscardPile(pile,index,owner='human') {
 }
 function seriesBoard(){
  if(!isOnline()||!ui.online.view?.series)return '';
- const series=ui.online.view.series,seat=ui.online.seat,myScore=series.wins[seat],theirScore=series.wins[1-seat],champion=series.champion;
- const result=champion===null?(series.format==='mixed'?'Games Night Mix · first to three wins':'First to three wins'):champion===seat?'YOU ARE THE SERIES CHAMPION':`${escapeHtml(opponentName())} WINS THE SERIES`;
+ const series=ui.online.view.series,seat=ui.online.seat,champion=series.champion;
+ const participants=ui.online.view.players;
+ const result=champion===null?(series.format==='mixed'?'Games Night Mix · first to three wins':'First to three wins')
+   :champion===seat?'YOU ARE THE SERIES CHAMPION':`${escapeHtml(participants[champion]?.name??'Player')} WINS THE SERIES`;
  return `<section class="series-board" aria-label="Games night series scoreboard"><div class="series-heading"><span>★ GAMES NIGHT · SERIES ${series.number}</span><strong>${result}</strong></div>
- <div class="series-scores"><div><small>You</small><strong>${myScore}</strong><span>${'●'.repeat(myScore)}${'○'.repeat(Math.max(0,series.target-myScore))}</span></div><div class="series-vs">VS</div><div><small>${escapeHtml(opponentName())}</small><strong>${theirScore}</strong><span>${'●'.repeat(theirScore)}${'○'.repeat(Math.max(0,series.target-theirScore))}</span></div></div>
- <p class="series-foot">${series.played} finished ${series.played===1?'match':'matches'} · ${series.draws} ${series.draws===1?'draw':'draws'}${series.history.length?` · Recent results: ${series.history.slice(0,5).map(row=>`${row.mode?`${games.find(g=>g.id===row.mode)?.title||'Table'}: `:''}${row.winner===-1?'Draw':row.winner===seat?'You':'Opponent'}`).join(' · ')}`:''}</p></section>`;
+ <div class="series-scores group-series-scores">${series.wins.map((wins,i)=>`<div><small>${i===seat?'You':escapeHtml(participants[i]?.name??`Player ${i+1}`)}</small><strong>${wins}</strong><span>${'●'.repeat(wins)}${'○'.repeat(Math.max(0,series.target-wins))}</span></div>`).join('')}</div>
+ <p class="series-foot">${series.played} finished ${series.played===1?'match':'matches'} · ${series.draws} ${series.draws===1?'draw':'draws'}${series.history.length?` · Recent results: ${series.history.slice(0,5).map(row=>`${row.mode?`${games.find(g=>g.id===row.mode)?.title||'Table'}: `:''}${row.winner===-1?'Draw':row.winner===seat?'You':escapeHtml(participants[row.winner]?.name??'Player')}`).join(' · ')}`:''}</p></section>`;
 }
 function rematchControl() {
  if(!isOnline() || ui.game?.winner===null)return '';
- const votes=ui.online.view?.rematchVotes??[false,false],requested=Boolean(votes[ui.online.seat]),opponent=Boolean(votes[1-ui.online.seat]);
+ const votes=ui.online.view?.rematchVotes??[],requested=Boolean(votes[ui.online.seat]);
+ const otherVotes=votes.filter((_,seat)=>seat!==ui.online.seat).filter(Boolean).length;
+ const others=votes.length-1;
  const series=ui.online.view?.series,seriesFinished=series?.champion!==null&&series?.champion!==undefined,again=seriesFinished?'new series':'rematch';
  const nextTable=series?.format==='mixed'?` Next up: ${escapeHtml(games.find(g=>g.id===series.nextMode)?.title||'next table')}.`:'';
- return `<div class="rematch-controls" role="status"><span>${requested?(opponent?'Starting the next match…':'Waiting for your friend to agree'):(opponent?'Your friend wants another game.':`Play another ${again} with the same opponent?${nextTable}`)}</span><button class="btn ${requested?'btn-outline':'btn-primary'}" data-action="${requested?'rematch-cancel':'rematch-request'}">${requested?'Cancel request':`Request ${again}`}</button></div>`;
+ const message=requested?`Waiting for ${others-otherVotes} more ${others-otherVotes===1?'player':'players'} to agree`:
+   (otherVotes?`${otherVotes} of ${others} other ${others===1?'player wants':'players want'} another game.`:`Play another ${again}?${nextTable}`);
+ return `<div class="rematch-controls" role="status"><span>${message}</span><button class="btn ${requested?'btn-outline':'btn-primary'}" data-action="${requested?'rematch-cancel':'rematch-request'}">${requested?'Cancel request':`Request ${again}`}</button></div>`;
 }
 function turnNotice(){
  if(!isOnline()||!ui.game)return '';
  const completed=ui.game.winner!==null,playing=ui.game.active===0;
- return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}" role="status" aria-live="polite"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':playing?'YOUR TURN':`${escapeHtml(opponentName())}’s turn`}</strong><small>${completed?'Choose whether to play again':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
+ const activeName=ui.game.players[ui.game.active]?.name??'Another player';
+ return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}" role="status" aria-live="polite"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':playing?'YOUR TURN':`${escapeHtml(activeName)}’s turn`}</strong><small>${completed?'Choose whether to play again':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
 }
 function activeStorageNotice(){
  if(!isOnline()||!ui.online?.view||ui.online.view.status!=='playing')return '';
@@ -245,11 +258,11 @@ function activeStorageNotice(){
 }
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${seriesBoard()}${activeStorageNotice()}${tableGuide()}`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${seriesBoard()}${opponentRail()}${activeStorageNotice()}${tableGuide()}`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();
- return `<aside class="sidebar"><div class="side-panel side-identity"><div class="eyebrow">TABLE DETAILS</div><div class="side-row"><span>Game</span><strong>${g.title}</strong></div><div class="side-row"><span>Opponents</span><strong>${isOnline()?escapeHtml(opponentName()):'1 House Bot'}</strong></div><div class="side-row"><span>Mode</span><strong>${isOnline()?'Online private · 2 players':'Local solo preview'}</strong></div>${isOnline()?`<div class="side-row"><span>Connection</span><strong>${ui.netStatus||'Connecting'} · ${opponentProfile()?.connected?'Opponent online':'Opponent offline'}</strong></div>`:''}</div>${extra}
+ return `<aside class="sidebar"><div class="side-panel side-identity"><div class="eyebrow">TABLE DETAILS</div><div class="side-row"><span>Game</span><strong>${g.title}</strong></div><div class="side-row"><span>Opponents</span><strong>${isOnline()?roomOpponents().map(p=>escapeHtml(p.name)).join(', '):'1 House Bot'}</strong></div><div class="side-row"><span>Mode</span><strong>${isOnline()?`Online private · ${ui.online.view.players.length} players`:'Local solo preview'}</strong></div>${isOnline()?`<div class="side-row"><span>Connection</span><strong>${ui.netStatus||'Connecting'} · ${roomOpponents().filter(p=>p.connected).length}/${roomOpponents().length} opponents online</strong></div>`:''}</div>${extra}
  <div class="side-panel log-panel"><h3>Table talk <span class="log-live">● Live</span></h3><ol>${state.log.slice(0,5).map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol></div>
  ${isOnline()?rematchControl():`<button class="reset-btn" data-action="restart">${icon('refresh',15)} Start a fresh match</button>`}
  </aside>`;
@@ -303,7 +316,7 @@ function sequenceScreen() {
   ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
   <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'}>Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
  </div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU WON THE TABLE!':isOnline()?'YOUR OPPONENT WON':'THE HOUSE BOT WON'}</strong><span>${s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU WON THE TABLE!':isOnline()?`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`:'THE HOUSE BOT WON'}</strong><span>${s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
 }
 function contractCard(card,i) {
@@ -369,7 +382,7 @@ function tileScreen(){const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo
  <p class="board-hint">${myTurn?`${indices.length} tile(s) selected${valid?' · Valid '+valid:''}. Choose “Lay new group”, or extend a table group.`:'Waiting for the other player.'}</p></div>
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.rack.length} tiles remaining`,myTurn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR TILE RACK</b><small>Tap tiles to select several</small></div>${handToolbar('tiles')}<div class="tiles-rack reordable-hand">${handItems('tiles',p.rack,(t,i)=>`<button class="tile-button" data-action="tile-select" data-index="${i}" aria-pressed="${indices.includes(i)}" aria-disabled="${!myTurn}">${tileFace(t,'',indices.includes(i))}</button>`)}</div>
  <div class="contract-actions tile-actions"><button class="btn btn-primary" data-action="tile-lay" ${!myTurn||!valid?'disabled':''}>Lay new group ${icon('check',17)}</button><button class="btn btn-outline" data-action="tile-end" data-draw="false" ${!myTurn||(!s.playedThisTurn&&s.draw.length>0)?'disabled':''}>End turn</button><button class="btn btn-outline" data-action="tile-end" data-draw="true" ${!myTurn||s.playedThisTurn||!s.draw.length?'disabled':''}>Draw a tile (${s.draw.length})</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU CLEARED YOUR RACK!':'OPPONENT CLEARED THEIR RACK'}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'RACK POINTS TIED · DRAW':s.winner===0?'YOU CLEARED YOUR RACK!':`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 function lowCell(c,i,myTurn){const hidden=!c.revealed&&!c.cleared;return `<button class="low-card ${hidden?'low-hidden':c.cleared?'low-cleared':c.value<0?'low-negative':''}" data-action="low-slot" data-index="${i}" ${!myTurn||c.cleared?'disabled':''} aria-label="Grid card ${i+1}, ${hidden?'face down':c.cleared?'cleared':c.value}">${c.cleared?'✧':hidden?'◆':c.value}</button>`;}
 function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.roundWinner===null&&s.winner===null;
@@ -385,17 +398,18 @@ function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(
 const suitsGlyph={hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
 function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
 function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.winner===null,top=s.discard.at(-1);
+ const noDrawPass=!s.draw.length&&s.discard.length<=1&&!p.hand.some(card=>eightCanPlay(card,s));
  const side=`<div class="side-panel objectives"><span class="eyebrow">CARD MATCHING</span><h3>Get rid of every card.</h3><p>Match the discard's suit or rank, or play a wild eight and declare a new suit. Draw once if you need a card; you may then play or pass.</p><div class="side-tip">${icon('sparkle',16)} Play the colour or rank, but save your wild eights for difficult turns.</div></div>`;
  return `<main class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${opp.hand.length} cards remaining`)}<div class="bot-cards">${opp.hand.map(()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
- <div class="eight-felt"><div class="board-section-label">ACTIVE SUIT: <b>${suitsGlyph[s.activeSuit]} ${s.activeSuit.toUpperCase()}</b></div><div class="eight-middle"><button class="draw-pile draw-deck" data-action="eight-draw" ${turn&&!s.drew?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW ONE</b><small>${s.draw.length} remaining</small></button><div class="eight-top">${eightFace(top,-1,false,s)}</div></div><p class="board-hint">${turn?'Choose a highlighted card, or draw once.':'Waiting for the other player.'}</p></div>
+ <div class="eight-felt"><div class="board-section-label">ACTIVE SUIT: <b>${suitsGlyph[s.activeSuit]} ${s.activeSuit.toUpperCase()}</b></div><div class="eight-middle"><button class="draw-pile draw-deck" data-action="eight-draw" ${turn&&!s.drew&&(s.draw.length||s.discard.length>1)?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW ONE</b><small>${s.draw.length} remaining</small></button><div class="eight-top">${eightFace(top,-1,false,s)}</div></div><p class="board-hint">${turn?'Choose a highlighted card, or draw once.':'Waiting for the other player.'}</p></div>
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.hand.length} cards left`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR HAND</b><small>${s.drew?'Drawn this turn · play or pass':'Match rank or suit'}</small></div>${handToolbar('eights')}<div class="eight-hand reordable-hand">${handItems('eights',p.hand,(c,i)=>eightFace(c,i,turn,s,true))}</div>
  ${ui.selected?.type==='eight'&&p.hand[ui.selected.index]?.value===8?`<div class="suit-choice"><b>Choose a new suit:</b>${SUITS.map(suit=>`<button class="btn btn-outline" data-action="eight-suit" data-suit="${suit}">${suitsGlyph[suit]} ${suit}</button>`).join('')}</div>`:''}
- <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&s.drew?'':'disabled'}>Pass after drawing ${icon('arrow',17)}</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU PLAYED YOUR LAST CARD!':'OPPONENT WON THE HAND'}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
+ <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&(s.drew||noDrawPass)?'':'disabled'}>${noDrawPass?'Pass · deck exhausted':'Pass after drawing'} ${icon('arrow',17)}</button></div></div></div>
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'HAND POINTS TIED · DRAW':s.winner===0?'YOU WON THE HAND!':`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE HAND`}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 function rulesText() {
  const g=gameInfo(),contract=g.kind==='contract';
- return g.kind==='tiles'?`<p>Each player starts with fourteen numbered tiles. Lay matching-number groups of three or four (each colour different) or same-colour consecutive runs of at least three.</p><ol><li>Select tiles in your rack, then lay a valid group onto the table.</li><li>Or select tiles and tap an existing group to extend it without making the group invalid.</li><li>After laying any tiles, end your turn. If you cannot or choose not to lay any, draw one tile instead.</li><li>First to empty their rack wins.</li></ol><p>House variant: table groups can be extended, not rearranged. Wild tiles act as jokers.</p>`:g.kind==='low'?`<p>Four rounds of card swapping. The player with the lowest accumulated total wins.</p><ol><li>Your 3 × 4 grid starts with two revealed cards.</li><li>Draw from the deck or take the face-up discard.</li><li>Swap your chosen card into any uncleared position. Alternatively, discard a deck draw and reveal one hidden card.</li><li>Three matching face-up values in the same column clear all three cards, scoring zero.</li><li>Once someone reveals their entire grid, the opponent takes one final turn. Hidden cards still score their values.</li><li>Play four rounds; lowest total wins. A tie is possible.</li></ol><p>Original four-round house variation inspired by low-score card games.</p>`:g.kind==='eights'?`<p>Match the top discarded card by suit or rank, or play an eight to declare any suit.</p><ol><li>Play a highlighted legal card from your hand.</li><li>For an eight, choose the suit that must be followed next.</li><li>If you do not play, draw one card. You may play after drawing, or pass.</li><li>The first player to empty their hand wins.</li></ol><p>Original simplified card-matching variant using a standard deck.</p>`:g.kind==='rack'?`<p>Build an ascending rack of ten cards from 1 to 60. Every card must be higher than the one before it.</p><ol><li>Draw the top card from the face-down deck or face-up discard pile.</li><li>Replace any one of your ten slots, or discard the card you picked up.</li><li>The replaced card becomes the new discard.</li><li>First player with all ten cards in strict ascending order wins.</li></ol><p>The other player's rack is always hidden. This is an original number-ordering variant.</p>`:contract?`<p>Take turns drawing one card from the deck or the face-up discard pile. Your goal is to collect the entire combination shown in the Current Contract panel.</p>
+ return g.kind==='tiles'?`<p>Each player starts with fourteen numbered tiles. Lay matching-number groups of three or four (each colour different) or same-colour consecutive runs of at least three.</p><ol><li>Select tiles in your rack, then lay a valid group onto the table.</li><li>Or select tiles and tap an existing group to extend it without making the group invalid.</li><li>After laying any tiles, end your turn. If you cannot or choose not to lay any, draw one tile instead.</li><li>First to empty their rack wins.</li></ol><p>House variant: table groups can be extended, not rearranged. Wild tiles act as jokers.</p>`:g.kind==='low'?`<p>Four rounds of card swapping. The player with the lowest accumulated total wins.</p><ol><li>Your 3 × 4 grid starts with two revealed cards.</li><li>Draw from the deck or take the face-up discard.</li><li>Swap your chosen card into any uncleared position. Alternatively, discard a deck draw and reveal one hidden card.</li><li>Three matching face-up values in the same column clear all three cards, scoring zero.</li><li>Once someone reveals their entire grid, the opponent takes one final turn. Hidden cards still score their values.</li><li>Play four rounds; lowest total wins. A tie is possible.</li></ol><p>Original four-round house variation inspired by low-score card games.</p>`:g.kind==='eights'?`<p>Match the top discarded card by suit or rank, or play an eight to declare any suit.</p><ol><li>Play a highlighted legal card from your hand.</li><li>For an eight, choose the suit that must be followed next.</li><li>If you do not play, draw one card. You may play after drawing, or pass.</li><li>The first player to empty their hand wins. If the deck is completely blocked, players may pass and the lowest hand points win (or tie).</li></ol><p>Original simplified card-matching variant using a standard deck.</p>`:g.kind==='rack'?`<p>Build an ascending rack of ten cards from 1 to 60. Every card must be higher than the one before it.</p><ol><li>Draw the top card from the face-down deck or face-up discard pile.</li><li>Replace any one of your ten slots, or discard the card you picked up.</li><li>The replaced card becomes the new discard.</li><li>First player with all ten cards in strict ascending order wins.</li></ol><p>The other player's rack is always hidden. This is an original number-ordering variant.</p>`:contract?`<p>Take turns drawing one card from the deck or the face-up discard pile. Your goal is to collect the entire combination shown in the Current Contract panel.</p>
  <ol><li>Draw one card.</li><li>If your hand contains the full contract, choose <strong>Lay my contract</strong>.</li><li>Otherwise select a card from your hand and choose <strong>Discard selected card</strong>.</li><li>The first player to lay a complete contract wins that round and advances to their next mission. The other player stays on their existing mission.</li><li>Finish all ${MISSION_SETS[ui.mode].length} contracts to win the match. The unlaid player's cards count as penalty points.</li></ol>
  <p>${ui.mode==='crown-circuit'?'Crown Circuit has five suits, ranks 3–13, and a wild rank that changes with each new round. This is an original contract-based variant, not the exact Five Crowns rules.':ui.mode==='shanghai-nights'?'Shanghai Nights uses seven house contracts; discard buying is not part of this version.':''}</p><p>Wild cards can substitute for any number or colour. For a run, numbers must be consecutive, with no duplicate fixed numbers. Lower penalty scores are preferable as a tie-breaker.</p>`
  :`<p>Race your opponent to clear your personal stockpile. Build shared centre stacks upwards from 1 to 12. A wild card substitutes for whatever number is needed next.</p>
@@ -441,7 +455,7 @@ function render(){
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 10</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 10</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  animateTable(beforeRects,handChanged);
  lastMotionSignature=motionSignature;
@@ -460,7 +474,7 @@ function checkBotTurn(){
  if(isOnline())return;
  if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
  const previous=ui.game;
- ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game):ui.game.kind==='low'?runLowBot(ui.game):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game);
+ ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game,ui.botDifficulty):ui.game.kind==='low'?runLowBot(ui.game,ui.botDifficulty):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game);
  showMoment(readGameBeat(previous,ui.game));
  saveSolo();render();
 }
@@ -485,12 +499,12 @@ function stopOnline() {
 function roomScreen() {
   if(ui.online && ui.online.view.status==='waiting') {
     const room=ui.online.view;
-    return `<main class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · ${room.series?.format==='mixed'?'GAMES NIGHT MIX':'SINGLE GAME'} · WAITING FOR A FRIEND</div>
-    <h1>Your table is ready.</h1><p>Share the private invite with one friend. Their phone will receive its own cards and turns.</p>
+    return `<main class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · ${room.series?.format==='mixed'?'GAMES NIGHT MIX':'SINGLE GAME'} · WAITING FOR PLAYERS</div>
+    <h1>Your table is ready.</h1><p>Share the invitation with your friends. Every player gets a private hand and their own turn.</p>
     <div class="room-code" aria-label="Room code ${room.code}">${room.code}</div>
-    <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}<div class="room-player room-empty">${icon('people',25)}<b>Waiting for player two</b><span>The game starts when they join</span></div></div>
-    <button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
-    <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · Invite codes are private, and only two players can take seats.</p>
+    <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}${room.players.length<room.maxPlayers?`<div class="room-player room-empty">${icon('people',25)}<b>${room.players.length} of ${room.maxPlayers} seats filled</b><span>Waiting for more friends</span></div>`:''}</div>
+    ${room.seat===0&&room.maxPlayers>2&&room.players.length>=3?'<button class="btn btn-primary" data-action="room-start">Start game now</button>':''}<button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
+    <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · ${room.maxPlayers} seats available. ${room.maxPlayers>2?'Host can start with 3 or more players.':'Game starts when your friend joins.'}</p>
     ${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
   }
   const joining=Boolean(ui.roomCode);
@@ -500,11 +514,11 @@ function roomScreen() {
     <input id="room-name" class="room-input" maxlength="24" autocomplete="nickname" placeholder="Your name" value="${escapeHtml(ui.roomName)}">
     ${joining?`<label class="room-label" for="room-code">SIX-CHARACTER ROOM CODE</label>
       <input id="room-code" class="room-input room-code-input" maxlength="6" autocomplete="off" spellcheck="false" value="${escapeHtml(ui.roomCode)}">`
-      :`<label class="room-label" for="room-game">CHOOSE YOUR FIRST GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select><label class="room-label" for="room-format">GAMES NIGHT FORMAT</label><select id="room-format" class="room-input"><option value="single" ${ui.roomFormat==='single'?'selected':''}>One game · first to three wins</option><option value="mixed" ${ui.roomFormat==='mixed'?'selected':''}>Games Night Mix · new game each match</option></select><p class="room-small">Mix rotates through all ten games. Both friends must accept each new match.</p>`}
+      :`<label class="room-label" for="room-game">CHOOSE YOUR FIRST GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select><label class="room-label" for="room-format">GAMES NIGHT FORMAT</label><select id="room-format" class="room-input"><option value="single" ${ui.roomFormat==='single'?'selected':''}>One game · first to three wins</option><option value="mixed" ${ui.roomFormat==='mixed'?'selected':''}>Games Night Mix · new game each match</option></select><p class="room-small">Mix rotates through all ten games in two-player mode. Group play uses one game and every player votes on rematches.</p><label class="room-label" for="room-capacity">PLAYERS AT THE TABLE</label><select id="room-capacity" class="room-input">${[2,3,4,5,6].map(n=>`<option value="${n}" ${ui.roomCapacity===n?'selected':''}>${n} players${n>2?' · supported group games only':''}</option>`).join('')}</select>`}
     <div class="room-profile"><img src="${asset(ui.avatarId).image}" alt=""> <span>Playing as <b>${asset(ui.avatarId).name}</b></span><button class="btn btn-outline" data-action="avatars">Change</button></div>
     <button class="btn btn-primary room-submit" data-action="${joining?'room-join':'room-host'}">${joining?'Join private table':'Create private table'} ${icon('arrow')}</button>
     <button class="btn btn-ghost" data-action="room-switch">${joining?'Create a room instead':'I have an invite code'}</button>
-    <p class="room-small">Two players per match. Multiplayer requires a running Node server; the offline HTML remains bot-only.</p>
+    <p class="room-small">2–6 players in Eight Shift, Stack Run, Malice Duel or Tile Royale; the other games remain two-player. Multiplayer requires a running Node server.</p>
     </section></main>`;
 }
 async function callRoom(url,{method='GET',body=null,token=null}={}) {
@@ -599,6 +613,11 @@ async function roomButton(action,control) {
       render();return;
     }
     if(action==='room-switch'){ui.roomCode=ui.roomCode?'':' ';render();return;}
+    if(action==='room-start'){
+      if(!ui.online)return;
+      const result=await callRoom(`/api/rooms/${ui.online.code}/start`,{method:'POST',token:ui.online.token});
+      syncRoom(result);return;
+    }
     if(action==='room-invite'){
       if(!ui.online)return;
       try{await navigator.clipboard.writeText(invitation(ui.online.code));toast('Private invitation copied.');}
@@ -610,8 +629,9 @@ async function roomButton(action,control) {
     if(action==='room-host') {
       const mode=document.getElementById('room-game').value;
       const format=document.getElementById('room-format')?.value||'single';
-      ui.roomFormat=format;
-      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar,format}});
+      const maxPlayers=Number(document.getElementById('room-capacity')?.value||2);
+      ui.roomFormat=format;ui.roomCapacity=maxPlayers;
+      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar,format,maxPlayers}});
       connectRoom(result.code,result.token,result.view);
     } else if(action==='room-join') {
       const code=(document.getElementById('room-code')?.value||'').trim().toUpperCase();
@@ -704,7 +724,7 @@ app.addEventListener('keydown',event=>{
 app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
   const action=control.dataset.action;
-  if(['room-open','room-switch','room-invite','room-host','room-join'].includes(action)){
+  if(['room-open','room-switch','room-invite','room-start','room-host','room-join'].includes(action)){
     event.stopImmediatePropagation();roomButton(action,control);return;
   }
   if(!isOnline())return;
@@ -828,6 +848,6 @@ app.addEventListener('change',event=>{
  if(event.target?.id==='bot-level'&&allowedBotLevels.includes(event.target.value)){
   ui.botDifficulty=event.target.value;
   try{localStorage.setItem('stackhouse.botDifficulty',ui.botDifficulty);}catch{}
-  toast(`House Bot difficulty: ${ui.botDifficulty}. Available on four tables.`);
+  toast(`House Bot difficulty: ${ui.botDifficulty}. Available on six tables.`);
  }
 });

@@ -179,3 +179,13 @@
 
 /* Phase 11: clear, non-alarming recovery limitation in the waiting lobby */
 .room-storage-warning{border-left:3px solid #e2b661;padding:8px 12px;background:rgba(226,182,97,.10);color:#ffdda3;border-radius:5px;}
+
+/* Phase 13: legible multiplayer seat rail, including narrow phone displays. */
+.group-opponents{display:flex;flex-wrap:wrap;gap:9px;margin:8px 0 14px}
+.group-opponent{flex:1 1 155px;min-width:130px;display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(5,36,39,.9);border:1px solid rgba(209,181,107,.28);border-radius:12px}
+.group-opponent img{width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid #c9a864}
+.group-opponent strong{color:#f7edcf;font-size:13px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group-opponent small{display:block;color:#a5ccb8;font-size:11px}
+.group-series-scores{flex-wrap:wrap;gap:12px 26px}
+.group-series-scores>div{flex:1 1 98px;max-width:185px}
+@media(max-width:600px){.group-opponents{gap:6px}.group-opponent{min-width:120px;padding:7px 9px}.group-opponent img{width:32px;height:32px}.group-series-scores{gap:9px}.group-series-scores>div{min-width:78px}}
