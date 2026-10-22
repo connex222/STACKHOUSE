@@ -11,6 +11,8 @@ import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eigh
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
 const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
 const hash = value => createHash('sha256').update(value).digest('hex');
+const validActionId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{12,90}$/.test(id);
+const ACTION_HISTORY_LIMIT = 80;
 const token = () => randomBytes(32).toString('base64url');
 const roomCode = () => Array.from({length:6},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');
 
@@ -138,7 +140,7 @@ export class RoomStore {
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now()};
+    const room={code,mode,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[]};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
   }
   createGame(mode,seed) {
@@ -165,27 +167,53 @@ export class RoomStore {
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
-    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,
+    return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageFile?'configured':'memory-only'};
   }
   async move(code,credential,action) {
     const {room,seat}=this._auth(code,credential);
     if(!action || typeof action!=='object'||Array.isArray(action))throw Error('Invalid action.');
+    // A retry with the same action ID is acknowledged but never played again, even after a
+    // reconnection or a subsequent turn. A reused ID with different content is rejected.
+    if(action.actionId!==undefined && !validActionId(action.actionId))throw Error('Invalid action ID.');
+    const digest=hash(JSON.stringify(Object.fromEntries(Object.entries(action).filter(([key])=>key!=='actionId'))));
+    const existing=action.actionId && room.recentActions?.find(entry=>entry.seat===seat&&entry.id===action.actionId);
+    if(existing) {
+      if(existing.digest!==digest)throw Error('Action ID was already used for a different move.');
+      return this.view(code,credential);
+    }
     if(action.revision!==room.revision)throw Error('The table changed before your move. Please try again.');
+    const acknowledge=()=>{
+      if(!action.actionId)return;
+      room.recentActions??=[];
+      room.recentActions.push({seat,id:action.actionId,digest});
+      if(room.recentActions.length>ACTION_HISTORY_LIMIT)room.recentActions.splice(0,room.recentActions.length-ACTION_HISTORY_LIMIT);
+    };
     if(action.type==='profile-avatar') {
       room.players[seat].avatar=safeAvatar(action.avatar);
-      room.revision++;room.updated=this.now();await this.save();this.notify(code);
+      acknowledge();room.revision++;room.updated=this.now();await this.save();this.notify(code);
       return this.view(code,credential);
     }
     if(!room.game)throw Error('Wait for your friend to join before playing.');
     const game=room.game;
+    if(action.type==='rematch-request'||action.type==='rematch-cancel') {
+      if(game.winner===null)throw Error('Finish the match before requesting a rematch.');
+      const votes=room.rematchVotes??[false,false];
+      const choice=action.type==='rematch-request';
+      if(votes[seat]===choice)throw Error(choice?'You have already requested a rematch.':'No rematch request to cancel.');
+      votes[seat]=choice;room.rematchVotes=votes;
+      if(votes.every(Boolean)) {
+        room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE()));
+        room.game.players.forEach((p,i)=>p.name=room.players[i].name);
+        room.game.log=[`Rematch started: ${room.players[0].name} versus ${room.players[1].name}.`];
+        room.rematchVotes=[false,false];
+      }
+      acknowledge();room.revision++;room.updated=this.now();await this.save();this.notify(code);
+      return this.view(code,credential);
+    }
     const kind=action.type;
-    if(kind==='restart') {
-      if(seat!==0||game.winner===null)throw Error('Only the host can restart a completed match.');
-      const seed=randomBytes(4).readUInt32BE();
-      room.game=securelyDeal(this.createGame(room.mode,seed));
-      room.game.players.forEach((p,i)=>p.name=room.players[i].name);
+    if(kind==='restart') {throw Error('Both players must agree before a new match.');
     } else {
       if(kind==='next-round') {
         if(!['contract','low'].includes(game.kind)||game.roundWinner===null||game.winner!==null)throw Error('The next round is not yet available.');
@@ -261,7 +289,7 @@ export class RoomStore {
       if(outcome?.error)throw Error(outcome.error);
       room.game=outcome.state;
     }
-    room.revision++;room.updated=this.now();
+    acknowledge();room.revision++;room.updated=this.now();
     await this.save();this.notify(code);
     return this.view(code,credential);
   }

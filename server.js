@@ -80,7 +80,8 @@ const server=createServer(async(req,res)=>{
   } catch(err) {
     if(res.headersSent){res.end();return;}
     const status=/access denied|session does not belong/i.test(err.message)?401
-      :/room not found/i.test(err.message)?404:400;
+      :/room not found/i.test(err.message)?404
+      :/table changed|already used/i.test(err.message)?409:400;
     json(res,status,{error:err.message||'Request failed.'});
   }
 });

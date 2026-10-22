@@ -61,3 +61,22 @@ test('HTTP integration: authenticated event stream receives updates on both phon
     controller.abort();
   }finally{await close();}
 });
+
+test('HTTP integration: retry acknowledgement is idempotent and different payload is conflict',async()=>{
+ const {base,close}=await serverFixture();
+ try {
+  const host=(await post(`${base}/api/rooms`,{mode:'phase-quest',name:'Alice',avatar:1})).data;
+  await post(`${base}/api/rooms/${host.code}/join`,{name:'Bob',avatar:2});
+  const action={type:'contract-draw',from:'deck',revision:2,actionId:'http-test-retry-action-17'};
+  const endpoint=`${base}/api/rooms/${host.code}/actions`;
+  const result=await post(endpoint,action,host.token);
+  assert.equal(result.status,200);
+  const retry=await post(endpoint,action,host.token);
+  assert.equal(retry.status,200);
+  assert.equal(retry.data.revision,result.data.revision);
+  const altered=await post(endpoint,{...action,from:'discard'},host.token);
+  assert.equal(altered.status,409);
+  const stale=await post(endpoint,{...action,actionId:'http-new-stale-action-29'},host.token);
+  assert.equal(stale.status,409);
+ }finally{await close();}
+});

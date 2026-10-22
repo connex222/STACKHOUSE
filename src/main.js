@@ -158,15 +158,25 @@ function seqDiscardPile(pile,index,owner='human') {
   return `<button class="mini-pile ${owner==='human'&&ui.selected?.type==='hand'?'pile-available':''}" data-action="${owner==='human'?'seq-discard-dest':'no-op'}" data-index="${index}" aria-label="Discard pile ${index+1}">
      <span class="mini-label">${index+1}</span><strong>${card?(card.wild?'★':card.value):'+'}</strong><small>${pile.length} card${pile.length===1?'':'s'}</small></button>`;
 }
+function rematchControl() {
+ if(!isOnline() || ui.game?.winner===null)return '';
+ const votes=ui.online.view?.rematchVotes??[false,false],requested=Boolean(votes[ui.online.seat]),opponent=Boolean(votes[1-ui.online.seat]);
+ return `<div class="rematch-controls" role="status"><span>${requested?(opponent?'Starting the next match…':'Waiting for your friend to agree'):(opponent?'Your friend wants another game.':'Play again with the same opponent?')}</span><button class="btn ${requested?'btn-outline':'btn-primary'}" data-action="${requested?'rematch-cancel':'rematch-request'}">${requested?'Cancel request':'Request rematch'}</button></div>`;
+}
+function turnNotice(){
+ if(!isOnline()||!ui.game)return '';
+ const completed=ui.game.winner!==null,playing=ui.game.active===0;
+ return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}" role="status" aria-live="polite"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':playing?'YOUR TURN':`${escapeHtml(opponentName())}’s turn`}</strong><small>${completed?'Choose whether to play again':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
+}
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div></div>`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();
  return `<aside class="sidebar"><div class="side-panel side-identity"><div class="eyebrow">TABLE DETAILS</div><div class="side-row"><span>Game</span><strong>${g.title}</strong></div><div class="side-row"><span>Opponents</span><strong>${isOnline()?escapeHtml(opponentName()):'1 House Bot'}</strong></div><div class="side-row"><span>Mode</span><strong>${isOnline()?'Online private · 2 players':'Local solo preview'}</strong></div>${isOnline()?`<div class="side-row"><span>Connection</span><strong>${ui.netStatus||'Connecting'} · ${opponentProfile()?.connected?'Opponent online':'Opponent offline'}</strong></div>`:''}</div>${extra}
  <div class="side-panel log-panel"><h3>Table talk <span class="log-live">● Live</span></h3><ol>${state.log.slice(0,5).map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol></div>
- ${isOnline()?`<button class="reset-btn" data-action="room-invite">${icon('people',15)} Copy room invitation</button>`:`<button class="reset-btn" data-action="restart">${icon('refresh',15)} Start a fresh match</button>`}
+ ${isOnline()?rematchControl():`<button class="reset-btn" data-action="restart">${icon('refresh',15)} Start a fresh match</button>`}
  </aside>`;
 }
 // Player-controlled presentation order; never mutate server-controlled hand arrays.
@@ -218,7 +228,7 @@ function sequenceScreen() {
   ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
   <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'}>Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
  </div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU WON THE TABLE!':isOnline()?'YOUR OPPONENT WON':'THE HOUSE BOT WON'}</strong><span>${s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host to start the next match.</span>':`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU WON THE TABLE!':isOnline()?'YOUR OPPONENT WON':'THE HOUSE BOT WON'}</strong><span>${s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
 }
 function contractCard(card,i) {
@@ -253,7 +263,7 @@ function contractScreen() {
  </div></div>
  ${s.roundWinner!==null?`<div class="game-banner ${s.roundWinner===0?'win':'lose'}"><strong>${s.roundWinner===0?'CONTRACT COMPLETE!':isOnline()?'YOUR OPPONENT COMPLETED THEIR CONTRACT':'HOUSE BOT COMPLETED ITS CONTRACT'}</strong>
  <span>${s.roundWinner===0?'You advanced to the next contract.':isOnline()?'Your opponent advanced. Your contract carries into the next round.':'The bot advanced. Your contract will carry into the next round.'} ${s.winner!==null?'Match finished!':''}</span>
- ${isOnline()&&s.winner!==null&&ui.online.seat!==0?'<span>Waiting for the host to start the next match.</span>':`<button class="btn btn-primary" data-action="${s.winner!==null?'restart':'next-round'}">${s.winner!==null?'New match':'Next round'} ${icon('arrow')}</button>`}</div>`:''}
+ ${isOnline()&&s.winner!==null?rematchControl():`<button class="btn btn-primary" data-action="${s.winner!==null?'restart':'next-round'}">${s.winner!==null?'New match':'Next round'} ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
 }
 function rackScreen() {
@@ -269,7 +279,7 @@ function rackScreen() {
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,'Your ordering rack',myTurn)}</div>
  <div class="your-tableau"><div class="hand-heading"><b>YOUR TEN SLOTS</b><small>${replacing?'Tap a number to replace it':'Keep the numbers in ascending order'}</small></div><div class="rack-cards">${p.rack.map((card,i)=>`<button class="rack-slot" data-action="rack-replace" data-index="${i}" ${replacing?'':'disabled'} aria-label="Slot ${i+1}, card ${card.value}"><small>SLOT ${i+1}</small><strong>${card.value}</strong><span>${replacing?'SWAP':'◆'}</span></button>`).join('')}</div>
  <div class="contract-actions"><button class="btn btn-outline" data-action="rack-discard" ${replacing?'':'disabled'}>Discard drawn card ${icon('arrow',17)}</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'PERFECT LADDER!':isOnline()?'YOUR OPPONENT COMPLETED THE LADDER':'THE HOUSE BOT COMPLETED THE LADDER'}</strong><span>${s.winner===0?'All ten numbers are in order.':'The next match is another chance.'}</span>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host to restart.</span>':`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'PERFECT LADDER!':isOnline()?'YOUR OPPONENT COMPLETED THE LADDER':'THE HOUSE BOT COMPLETED THE LADDER'}</strong><span>${s.winner===0?'All ten numbers are in order.':'The next match is another chance.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
 }
 function tileFace(tile,attr='',selected=false){
@@ -284,7 +294,7 @@ function tileScreen(){const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo
  <p class="board-hint">${myTurn?`${indices.length} tile(s) selected${valid?' · Valid '+valid:''}. Choose “Lay new group”, or extend a table group.`:'Waiting for the other player.'}</p></div>
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.rack.length} tiles remaining`,myTurn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR TILE RACK</b><small>Tap tiles to select several</small></div>${handToolbar('tiles')}<div class="tiles-rack reordable-hand">${handItems('tiles',p.rack,(t,i)=>`<button class="tile-button" data-action="tile-select" data-index="${i}" aria-pressed="${indices.includes(i)}" aria-disabled="${!myTurn}">${tileFace(t,'',indices.includes(i))}</button>`)}</div>
  <div class="contract-actions tile-actions"><button class="btn btn-primary" data-action="tile-lay" ${!myTurn||!valid?'disabled':''}>Lay new group ${icon('check',17)}</button><button class="btn btn-outline" data-action="tile-end" data-draw="false" ${!myTurn||(!s.playedThisTurn&&s.draw.length>0)?'disabled':''}>End turn</button><button class="btn btn-outline" data-action="tile-end" data-draw="true" ${!myTurn||s.playedThisTurn||!s.draw.length?'disabled':''}>Draw a tile (${s.draw.length})</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU CLEARED YOUR RACK!':'OPPONENT CLEARED THEIR RACK'}</strong>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host.</span>':'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU CLEARED YOUR RACK!':'OPPONENT CLEARED THEIR RACK'}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 function lowCell(c,i,myTurn){const hidden=!c.revealed&&!c.cleared;return `<button class="low-card ${hidden?'low-hidden':c.cleared?'low-cleared':c.value<0?'low-negative':''}" data-action="low-slot" data-index="${i}" ${!myTurn||c.cleared?'disabled':''} aria-label="Grid card ${i+1}, ${hidden?'face down':c.cleared?'cleared':c.value}">${c.cleared?'✧':hidden?'◆':c.value}</button>`;}
 function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.roundWinner===null&&s.winner===null;
@@ -295,7 +305,7 @@ function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(
  <p class="rack-held">${held?`HELD CARD <strong>${s.held.value}</strong>`:s.roundWinner!==null?'ROUND COMPLETE':turn?'DRAW TO BEGIN YOUR TURN':'WAITING FOR OPPONENT'}</p></div>
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.score} points · current grid`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR 3 × 4 GRID</b><small>${held?'Choose where to place your card':'Reveal all cards to finish'}</small></div><div class="low-grid">${p.grid.map((c,i)=>lowCell(c,i,turn&&s.step==='place')).join('')}</div>
  <div class="contract-actions"><button class="btn ${ui.lowAction==='replace'?'btn-primary':'btn-outline'}" data-action="low-mode" data-mode="replace" ${held?'':'disabled'}>Swap into grid</button><button class="btn ${ui.lowAction==='flip'?'btn-primary':'btn-outline'}" data-action="low-mode" data-mode="flip" ${held&&s.drawnFrom==='deck'?'':'disabled'}>Discard & flip</button></div><p class="board-hint">${held?ui.lowAction==='flip'?'Choose a face-down card to reveal.':'Choose a grid position to replace, even one already face up.':'Three equal revealed numbers in one column clear automatically.'}</p></div></div>
- ${s.roundWinner!==null?`<div class="game-banner ${s.winner===-1?'':s.winner===null?'win':s.winner===0?'win':'lose'}"><strong>${s.winner!==null?s.winner===-1?'MATCH TIED':s.winner===0?'LOW-SCORE CHAMPION!':'YOUR OPPONENT WON':`ROUND ${s.round} FINISHED`}</strong><span>Totals: You ${p.score} · ${isOnline()?escapeHtml(opponentName()):'Bot'} ${opp.score} points.</span>${isOnline()&&s.winner!==null&&ui.online.seat!==0?'<span>Waiting for the host.</span>':`<button class="btn btn-primary" data-action="${s.winner===null?'next-round':'restart'}">${s.winner===null?'Next round':'New match'}</button>`}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
+ ${s.roundWinner!==null?`<div class="game-banner ${s.winner===-1?'':s.winner===null?'win':s.winner===0?'win':'lose'}"><strong>${s.winner!==null?s.winner===-1?'MATCH TIED':s.winner===0?'LOW-SCORE CHAMPION!':'YOUR OPPONENT WON':`ROUND ${s.round} FINISHED`}</strong><span>Totals: You ${p.score} · ${isOnline()?escapeHtml(opponentName()):'Bot'} ${opp.score} points.</span>${isOnline()&&s.winner!==null?rematchControl():`<button class="btn btn-primary" data-action="${s.winner===null?'next-round':'restart'}">${s.winner===null?'Next round':'New match'}</button>`}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 const suitsGlyph={hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
 function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
@@ -306,7 +316,7 @@ function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInf
  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.hand.length} cards left`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR HAND</b><small>${s.drew?'Drawn this turn · play or pass':'Match rank or suit'}</small></div>${handToolbar('eights')}<div class="eight-hand reordable-hand">${handItems('eights',p.hand,(c,i)=>eightFace(c,i,turn,s,true))}</div>
  ${ui.selected?.type==='eight'&&p.hand[ui.selected.index]?.value===8?`<div class="suit-choice"><b>Choose a new suit:</b>${SUITS.map(suit=>`<button class="btn btn-outline" data-action="eight-suit" data-suit="${suit}">${suitsGlyph[suit]} ${suit}</button>`).join('')}</div>`:''}
  <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&s.drew?'':'disabled'}>Pass after drawing ${icon('arrow',17)}</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU PLAYED YOUR LAST CARD!':'OPPONENT WON THE HAND'}</strong>${isOnline()&&ui.online.seat!==0?'<span>Waiting for the host.</span>':'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
+ ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'YOU PLAYED YOUR LAST CARD!':'OPPONENT WON THE HAND'}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
 function rulesText() {
  const g=gameInfo(),contract=g.kind==='contract';
@@ -396,6 +406,7 @@ async function callRoom(url,{method='GET',body=null,token=null}={}) {
 }
 function syncRoom(view) {
   if(!ui.online||ui.online.code!==view.code)return;
+  if(ui.online.view && view.revision<ui.online.view.revision)return; // Never roll back newer state on a slow stream.
   const changed=ui.online.view?.revision!==view.revision;
   ui.online.view=view;
   ui.mode=view.mode;
@@ -417,15 +428,17 @@ async function liveRoomStream(epoch) {
   let failures=0;
   while(epoch===networkSequence&&isOnline()) {
     const controller=new AbortController();streamAbort=controller;
+    let watchdog=null;
+    const keepAlive=()=>{clearTimeout(watchdog);watchdog=setTimeout(()=>controller.abort('stalled'),55000);};
     try {
       const current=ui.online;
       const response=await fetch(`/api/rooms/${current.code}/events`,{headers:{authorization:`Bearer ${current.token}`,accept:'text/event-stream'},signal:controller.signal,cache:'no-store'});
       if(!response.ok)throw Error(response.status===401?'Private room session expired.':'Could not connect to the game server.');
-      ui.netStatus='Connected';render();failures=0;
+      ui.netStatus='Connected';render();failures=0;keepAlive();
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
       while(epoch===networkSequence) {
         const {done,value}=await reader.read();if(done)break;
-        buffer+=decoder.decode(value,{stream:true});
+        keepAlive();buffer+=decoder.decode(value,{stream:true});
         if(buffer.length>100000)throw Error('Network data too large.');
         let cut;
         while((cut=buffer.indexOf('\n\n'))!==-1) {
@@ -434,18 +447,39 @@ async function liveRoomStream(epoch) {
           if(dataLine)syncRoom(JSON.parse(dataLine.slice(6)));
         }
       }
-    }catch(err){if(epoch!==networkSequence||controller.signal.aborted)break;ui.netStatus='Reconnecting…';render();failures++;}
+    }catch(err){
+      if(epoch!==networkSequence||(controller.signal.aborted&&controller.signal.reason!=='stalled'))break;
+      ui.netStatus='Reconnecting…';render();failures++;
+    }finally{clearTimeout(watchdog);}
     if(epoch!==networkSequence)break;
     await new Promise(resolve=>setTimeout(resolve,Math.min(6000,1200+failures*900)));
   }
 }
 async function withRoomAction(action) {
-  if(!ui.online)return;
+  if(!ui.online||ui.online.pending)return;
   const current=ui.online;
+  const payload={...action,revision:current.view.revision,actionId:crypto.randomUUID()};
+  current.pending=true;
   try {
-    const view=await callRoom(`/api/rooms/${current.code}/actions`,{method:'POST',token:current.token,body:{...action,revision:current.view.revision}});
-    if(ui.online?.code===current.code) {syncRoom(view);sound('card');}
-  } catch(err) {toast(err.message,true);}
+    for(let attempt=0;attempt<3;attempt++) {
+      try {
+        // Retrying the SAME identifier protects against double-play if the server
+        // applied the move but the phone lost its acknowledgement.
+        const view=await callRoom(`/api/rooms/${current.code}/actions`,{method:'POST',token:current.token,body:payload});
+        if(ui.online===current){syncRoom(view);sound('card');}
+        return;
+      } catch(err) {
+        if(!(err instanceof TypeError)||attempt===2)throw err;
+        ui.netStatus='Reconnecting…';render();
+        await new Promise(resolve=>setTimeout(resolve,450*(attempt+1)));
+      }
+    }
+  } catch(err) {
+    if(ui.online===current){
+      try {const view=await callRoom(`/api/rooms/${current.code}/state`,{token:current.token});syncRoom(view);}catch {ui.netStatus='Reconnecting…';render();}
+      toast(err.message,true);
+    }
+  } finally {current.pending=false;}
 }
 async function roomButton(action,control) {
   try {
@@ -567,8 +601,8 @@ app.addEventListener('click',event=>{
     ui.avatarId=avatar;localStorage.setItem('stackhouse.avatar',String(avatar));
     withRoomAction({type:'profile-avatar',avatar});return;
   }
-  if(action==='next-round'||action==='restart'){
-    event.stopImmediatePropagation();withRoomAction({type:action});return;
+  if(['next-round','restart','rematch-request','rematch-cancel'].includes(action)){
+    event.stopImmediatePropagation();withRoomAction({type:action==='restart'?'rematch-request':action});return;
   }
   if(ui.screen!=='game')return;
   let command;

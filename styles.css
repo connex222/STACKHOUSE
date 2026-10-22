@@ -118,3 +118,14 @@
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:600px){.hand-organiser{gap:6px}.hand-organiser-hint{flex-basis:100%;font-size:10px}.arrange-toggle,.arrange-sort{min-height:39px;font-size:11px}}
 @media(prefers-reduced-motion:reduce){.hand-piece,.drag-ghost{transition:none!important}}
+
+/* Phase 7 — high-contrast turn status and mutual rematch confirmation. */
+.turn-notice{margin:12px 0 5px;border:1px solid #6aa398;border-radius:13px;padding:13px 16px;display:flex;align-items:center;gap:12px;background:linear-gradient(110deg,#0c403b,#092b32);color:#f9efce;flex-wrap:wrap}
+.turn-notice strong{letter-spacing:.06em;font-size:14px}.turn-notice small{color:#c8d9d2;font-size:12px}
+.turn-light{height:12px;width:12px;background:#cba46f;border-radius:50%;box-shadow:0 0 0 3px #ae996134;flex:none}
+.turn-yours{border-color:#6be3c6}.turn-yours .turn-light{background:#62efbd;box-shadow:0 0 0 4px #37bb8c35,0 0 14px #54f4bd90}
+.turn-finished{border-color:#d6b675}.turn-finished .turn-light{background:#ffc978}
+.rematch-controls{display:flex;flex-direction:column;align-items:center;gap:9px;padding:12px;border:1px solid #a58d5f;border-radius:12px;background:#0b3234;color:#f1dfb8;font-size:13px;text-align:center}
+.rematch-controls button{width:100%;min-height:42px}
+.game-banner .rematch-controls{margin-top:12px;max-width:340px;margin-inline:auto}
+@media(max-width:600px){.turn-notice{padding:11px 12px;gap:8px}.turn-notice small{flex-basis:100%}}

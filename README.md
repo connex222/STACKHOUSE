@@ -1,4 +1,14 @@
-# STACKHOUSE SOCIAL — Ten Tables (Phase 6: Save and Organise)
+## Phase 7: Reliable private tables (v0.7.0)
+
+- Every browser action carries a cryptographically random ID. The server holds a bounded, seat-scoped acknowledgement ledger, so retries after a lost network response cannot deal, draw or play twice. Reused IDs with different payloads are refused.
+- The browser automatically retries temporary network failures using **the same action ID**, refreshes authoritative state after errors, and ignores stale server updates.
+- The private-table stream reconnects after interrupted connections and after 55 seconds with no traffic, including heartbeat traffic. Players reconnect using their previously saved seat token.
+- Completed online games offer a **Request rematch** control to both players. One player can withdraw their request; a new game starts only when **both** request it. The rematch is dealt afresh by the server, keeping avatars and room codes.
+- The private table now shows a prominent accessible **Your turn / Opponent’s turn / Match complete** indicator.
+- Automated Node tests cover action retries, races, guest/host consent, cancellation, persistence and HTTP conflict responses. **Actual separate-phone testing is still required.**
+- Saved server rooms require `ROOM_DATA_FILE` pointed at persistent storage. Render instances with memory-only storage **lose open multiplayer rooms on restart**. Solo resume remains browser-local.
+
+# STACKHOUSE SOCIAL — Ten Tables (Phase 7: Multiplayer Reliability)
 
 ## Phase 6: Resume games and improved hand organisation
 
@@ -10,17 +20,22 @@
 
 
 
+
 ## Hand and tile reordering — Phase 4.1
 
-The latest update lets players rearrange their hands in **Stack Run**, **Phase Quest**, **Malice Duel**, **Contract Club**, **Crown Circuit**, **Shanghai Nights**, **Tile Royale** and **Eight Shift**.
+**New in this update:** A player's hand can be rearranged visually in **Stack Run**, **Malice Duel**, **Phase Quest**, **Contract Club**, **Crown Circuit**, **Shanghai Nights**, **Tile Royale** and **Eight Shift**.
 
-- Drag and drop cards or tiles to rearrange them with mouse, touch or stylus.
-- On phones, use **Arrange**, select a card, then select its destination. Select **Done arranging** to return to normal play.
-- Use **Sort ↑** to sort by number, or **Alt + Left/Right Arrow** while a card is focused.
-- Hand order affects presentation only: server-owned hand positions and legality remain unchanged. Newly drawn cards append to the displayed order.
-- **Number Ladder** and **Low Glow** deliberately retain fixed card grids because positions affect their rules.
+- **Mouse or finger:** Drag any card/tile and drop it over the position you want. On phones, drag across the rack; cards and tiles animate and the drop position is outlined.
+- **Tap alternative:** Select **Arrange**, tap the card/tile to move, and then tap its desired position. Select **Done arranging** to go back to normal gameplay. While in Arrange mode, taps do not play or discard cards.
+- **Quick sort:** Choose **Sort ↑** to order the hand by number (with colour/suit as a tie-breaker).
+- **Keyboard:** Focus a hand card/tile and press **Alt + Left/Right arrow** to shift its displayed position.
+- **Independent display:** Reordering is client-only; it does not change hand indices in the engine, hidden information, turn state or the server's canonical data. Game actions still use the original card/tile identity.
+- **After draws:** Any newly drawn card/tile appears at the end of your displayed hand; existing cards keep their chosen positions. Arrangements reset when starting a new game.
 
-Automated checks: **67 tests passed** for this update. Full physical two-phone multiplayer acceptance testing is still pending.
+**Why not Number Ladder or Low Glow?** Their card slots are fixed *game positions*, not an unordered hand. Reordering those slots would invalidate the puzzle rules, so those grids deliberately remain fixed.
+
+Tests: `npm test` (including hand-order and solo-save correctness tests). Build portable offline edition: `npm run build:offline`. Browser tests were run in Chromium for drag, sorting and tap-to-arrange on all four interface types, plus narrow mobile-width rendering. Actual physical-device acceptance testing remains outstanding.
+
 
 **Ten playable original card and tile variants.** This is a phone-first private games-night collection, with 16 selectable portrait avatars, a gold-and-teal lounge, bot opponents, optional card sounds and private server-authoritative two-player rooms.
 
@@ -65,7 +80,7 @@ These are **independently implemented house-rule variants**, not official releas
 ## Run builds and automated checks
 
 ```bash
-npm test             # Phase 4: 67 automated tests
+npm test             # Phase 6: 70+ automated tests
 npm run build        # Assemble static dist/ (no multiplayer backend by itself)
 npm run build:offline  # Recreate self-contained PLAY-OFFLINE.html
 ```
@@ -76,7 +91,7 @@ Tests cover core game legality, card inventory, deterministic bots, secure room 
 
 The provided `render.yaml` specifies a **Node web service**, not a static website. To publish live multiplayer, put this project in its own GitHub repository and configure Render to build with `npm run build` and start with `npm start`. The `/health` route returns application status. For persistence through server restarts, configure a protected storage volume and `ROOM_DATA_FILE`, or migrate to a managed database. This server is designed for a **single Node process** with private two-player rooms, not public matchmaking or large-scale production traffic. Rotate/restrict infrastructure credentials appropriately and review hosting costs.
 
-**Current deployment status:** Phase 4.1 is maintained in the dedicated GitHub repository `connex222/STACKHOUSE`. A live Render deployment has not been verified.
+**Current deployment:** GitHub repository `connex222/STACKHOUSE` is connected to a Render web service at https://stackhouse-m50w.onrender.com. Render uses the Node server build. Verify its latest deploy status after any push.
 
 ## Outstanding development work
 
