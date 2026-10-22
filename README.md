@@ -1,4 +1,4 @@
-> **Current release: v1.7.0 — Phase 17 accessibility and release-readiness checks.** See [Phase 17 release notes](README_PHASE17.md), [Phase 16 rules fixes](README_PHASE16.md) and the [release-validation checklist](README_RELEASE_VALIDATION.md).
+> **Current release: v1.6.0 — Phase 16 rules and accessibility corrections.** See [Phase 16 release notes](README_PHASE16.md) and the [independent release-validation checklist](README_RELEASE_VALIDATION.md).
 
 # STACKHOUSE SOCIAL — Previous releases
 
@@ -153,3 +153,7 @@ The provided `render.yaml` specifies a **Node web service**, not a static websit
 
 ## Phase 11 (v1.1.0)
 See [README_PHASE11.md](README_PHASE11.md) for the opt-in PostgreSQL durable-room backend, concurrency safeguards, deployment conditions and real-phone acceptance checklist. The existing Render service is **memory-only until DATABASE_URL is configured**; no new database has been provisioned.
+
+## Phase 18 audio
+
+See [README_PHASE18.md](README_PHASE18.md) for the sound bank, Sonilo/Mirelo production provenance and provider-asset import status.

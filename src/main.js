@@ -1,3 +1,4 @@
+import {createGameAudio} from './audio.js';
 import { sessionSeed } from './rng.js';
 import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-order.js';
 import {SOLO_SAVE_KEY,encodeSoloSave,decodeSoloSave} from './solo-save.js';
@@ -88,6 +89,7 @@ const asset=id=>avatars.find(a=>a.id===id)||avatars[0];
 const gameInfo=()=>games.find(g=>g.id===ui.mode)||games[0];
 const escapeHtml=(s)=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const cls=(...names)=>names.filter(Boolean).join(' ');
+const sampleAudio=createGameAudio();
 let audioContext;
 let ambienceVoices=[];
 let ambienceGain=null;
@@ -101,6 +103,7 @@ function contextForAudio(){
 // Soft procedural table sounds: no downloads, no large sound files or autoplay.
 function sound(type='tap') {
  if(!ui.soundOn)return;
+ if(sampleAudio.play(type))return;
  try {
   const ctx=contextForAudio();if(!ctx)return;
   const notes={tap:[392],select:[523],card:[330,495],deal:[262,392,523],draw:[294,440],
@@ -850,7 +853,7 @@ app.addEventListener('click',event=>{
      case 'avatars':ui.modal='avatars';sound();render();break;
      case 'rules':ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
-     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sound();render();break;
+     case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);sound();render();break;
      case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;
@@ -919,6 +922,7 @@ window.addEventListener('keydown',event=>{
  else if(!event.shiftKey&&(document.activeElement===last||!modal.contains(document.activeElement))){event.preventDefault();first.focus();}
 },true);
 document.addEventListener?.('visibilitychange',syncAmbience);
+if(ui.soundOn)sampleAudio.setEnabled(true);
 window.addEventListener?.('pagehide',()=>{ambienceVoices.forEach(v=>{try{v.stop();}catch{}});ambienceVoices=[];ambienceGain=null;});
 render();
 restoreRoom();

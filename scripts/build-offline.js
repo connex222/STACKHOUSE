@@ -9,11 +9,12 @@ const lounge=await inline('assets/lounge.webp');
 const logo=await inline('assets/logo.webp');
 let css=(await read('styles.css')).replaceAll('/assets/lounge.webp',lounge);
 const sources=[];
-for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo-records.js','src/game-feel.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
+for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo-records.js','src/game-feel.js','src/audio.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
  let code=await read(file);
  code=code.replace(/^import\s+[^;]*;\s*$/gm,'');
  if(file.startsWith('src/engine/')) code=code.replace(/\bclone\b/g,file.includes('sequence')?'sequenceClone':file.includes('contracts')?'contractClone':file.includes('rack')?'rackClone':file.includes('tiles')?'tileClone':file.includes('lowcard')?'lowClone':'eightClone');
  code=code.replace(/^export\s+(?=(const|function|class|async))/gm,'');
+ if(file==='src/audio.js') {code=code.replaceAll("'/assets/audio/","'data:audio/mpeg;base64,"); for (const sound of ['ui-tap','card-place','card-deal','card-shuffle','tile-place','round-complete','victory','lose','error']) {const b64=(await readFile(resolve(root,`assets/audio/${sound}.mp3`))).toString('base64');code=code.replace(`'data:audio/mpeg;base64,${sound}.mp3'`,`'data:audio/mpeg;base64,${b64}'`)} }
  if(file==='src/main.js') {
   code=code.replace('`/assets/avatar-${String(i+1).padStart(2,\'0\')}.webp`','OFFLINE_AVATARS[i]');
   code=code.replaceAll('src="/assets/logo.webp"','src="${OFFLINE_LOGO}"');
