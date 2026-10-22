@@ -43,7 +43,17 @@ const server=createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     const pathname=decodeURIComponent(url.pathname);
-    if(pathname==='/health')return json(res,200,{ok:true,service:'stackhouse-social',multiplayer:true,storage:store.storageKind,durableStorage:store.storageKind==='postgres'});
+    if(pathname==='/health') {
+      const databaseConnected=snapshotStore ? await snapshotStore.ping() : null;
+      const ok=databaseConnected!==false;
+      return json(res,ok?200:503,{
+        ok,service:'stackhouse-social',multiplayer:true,
+        storage:store.storageKind,
+        // A filesystem snapshot is not automatically durable on a cloud host.
+        durableStorage:store.storageKind==='postgres' && databaseConnected===true,
+        databaseConnected
+      });
+    }
     if(pathname.startsWith('/api/')) {
       if(limited(req))return json(res,429,{error:'Too many requests. Please try again shortly.'});
       if(req.method==='POST'&&pathname==='/api/rooms')return json(res,201,await store.create(await readJson(req)));
@@ -70,7 +80,9 @@ const server=createServer(async(req,res)=>{
     }
     if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed.'});
     const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));
-    if(!file.startsWith(root+path.sep)||!allowed.has(path.extname(file))||!['index.html','styles.css','PLAY-OFFLINE.html','assets','src'].some(a=>file===path.join(root,a)||file.startsWith(path.join(root,a)+path.sep))){
+    if(!file.startsWith(root+path.sep)||!allowed.has(path.extname(file))||
+      (pathname.startsWith('/src/server/'))||
+      !['index.html','styles.css','PLAY-OFFLINE.html','assets','src'].some(a=>file===path.join(root,a)||file.startsWith(path.join(root,a)+path.sep))){
       res.writeHead(403);res.end('Forbidden');return;
     }
     await stat(file);

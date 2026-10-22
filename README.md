@@ -1,3 +1,9 @@
+# STACKHOUSE SOCIAL — Phase 12: multiplayer acceptance (v1.2.0)
+
+See [Phase 12 release notes](README_PHASE12.md). Automated two-client HTTP/SSE tests cover all ten games, saved-state restart rehearsal and readiness reporting. Cloud PostgreSQL storage is **not active**, and physical two-phone testing remains outstanding.
+
+---
+
 # STACKHOUSE SOCIAL — Phase 10: Games Night Mix (v1.0.0)
 
 See [Phase 10 release notes](README_PHASE10.md) for mixed-game tournaments, selectable bot challenge levels and production limitations.

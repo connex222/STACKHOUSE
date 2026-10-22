@@ -236,9 +236,16 @@ function turnNotice(){
  const completed=ui.game.winner!==null,playing=ui.game.active===0;
  return `<div class="turn-notice ${completed?'turn-finished':playing?'turn-yours':'turn-theirs'}" role="status" aria-live="polite"><span class="turn-light" aria-hidden="true"></span><strong>${completed?'Match complete':playing?'YOUR TURN':`${escapeHtml(opponentName())}’s turn`}</strong><small>${completed?'Choose whether to play again':playing?'Choose a card or make your move':'The table will update automatically'} · ${escapeHtml(ui.netStatus||'Connecting')}</small></div>`;
 }
+function activeStorageNotice(){
+ if(!isOnline()||!ui.online?.view||ui.online.view.status!=='playing')return '';
+ const storage=ui.online.view.storage;
+ if(storage==='memory-only')return '<p class="room-small room-storage-warning" role="status">This private table is not protected against server restarts. Your phone can reconnect after a brief signal loss, but a service restart may end the match.</p>';
+ if(storage==='filesystem-only')return '<p class="room-small room-storage-warning" role="status">Restart recovery is available only if the host has configured persistent disk storage.</p>';
+ return '';
+}
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${seriesBoard()}${tableGuide()}`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${seriesBoard()}${activeStorageNotice()}${tableGuide()}`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();

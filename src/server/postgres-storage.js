@@ -34,6 +34,16 @@ export class PostgresSnapshotStore {
     if(!result.rows?.length)throw Error('Room snapshot conflict: another server changed the saved state. Restart to reload safely.');
     this.generation=Number(result.rows[0].generation);
   }
+  /** Probe the database rather than assuming a configured URL means it is reachable. */
+  async ping() {
+    if (!this.ready) return false;
+    try {
+      await this.client.query('SELECT 1 AS stackhouse_ready');
+      return true;
+    } catch {
+      return false;
+    }
+  }
   async close(){await this.client.end?.();}
 }
 export async function connectPostgresSnapshot(databaseUrl) {
