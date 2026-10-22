@@ -692,3 +692,25 @@ The Phase 21 follow-up is an intentional **house-rule change** (not a promise to
 - **Validation:** New engine tests cover difficulty selection, non-use of opponent secrets, legal contract turns and presence of the audio and tutorial controls. Existing gameplay regressions are retained. Passing automated tests does **not** replace human difficulty balancing or real-device audio checks.
 
 **Remaining release issues:** durable multiplayer storage, physical-phone testing, native zoom and assistive-technology acceptance. Do not treat these as complete.
+
+## Phase 23 — Games Night TV & host controls (v2.3.0)
+
+**Purpose:** Run a private games-night table with a read-only shared TV/laptop display without exposing any player's hidden information. No new game modes or changes to house rules have been introduced in this phase.
+
+### TV spectator display
+
+1. Host a private online table (two to six players according to the game).
+2. The **host (seat 1)** presses **Create TV display link** in the lobby or at the playing table.
+3. Paste the copied link into the television's browser, a connected computer or another display, and open it. There is no need to join as a player.
+4. The TV displays player portraits, live turn and connection indicators, match wins, first-to-three series standing, draw-pile counts, public shared cards/piles and relevant round progress. It never shows a hidden card or tile identity from any player's hand, rack, stockpile or undrawn deck.
+5. The host may choose **Replace TV link** to rotate the spectator credential (immediately revoking previous links), or **Disable TV link** to close spectator access entirely.
+
+**Security model:** the spectator URL stores the independent, random **TV-only token in the URL fragment** (`/tv.html#room=ABCDEF&key=…`), not the query string. The server keeps only its SHA-256 hash, and the TV client authenticates API/SSE connections with an `Authorization` header. TV endpoints are **read-only** and only return a strict public-information allowlist, independent of `projectGame()`, which reveals the authenticated player's cards. A TV credential cannot join rooms, take turns, pause play, or change a player avatar. The TV stream has its own connection quota and automatically reconnects after ordinary network drops; revoked links fail closed. Treat the TV link as private, even though it grants no player control.
+
+**Host controls:** the host can **Pause table** and **Resume table** while a match is in progress. Pausing blocks server-side gameplay actions for every player (including rematch votes); it does not change scores or deck order. Only the host can resume. The host can still change their avatar while paused. Paused state and spectator-link hash are included in configured room snapshots; with the default Render memory-only service they will *not* survive an instance restart.
+
+**Group competition:** the existing first-to-three series ledger and rematch-consent rule are retained, and the TV makes the standings visible to the whole room. A new match still requires every player to vote. The eight group games still support 3–6 players; Number Ladder, Low Glow and Games Night Mix remain two-player experiences. The table seats include the host: six players means host plus five friends.
+
+**Verification:** `npm test` runs independent spectator redaction, permission, pause, link rotation/revocation, six-game reconnection and persistence-regression checks, plus a live HTTP/SSE acceptance test. `npm run build` also packages the TV HTML/CSS/client assets into `dist` while keeping the standalone bot edition intact.
+
+**Outstanding for production release:** in-person TV overscan/readability tests, real multi-phone network tests, and connecting a durable PostgreSQL room store if continuous matches across Render restarts are required. Native screen-reader accessibility sign-off is also outstanding.

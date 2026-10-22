@@ -295,3 +295,12 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
 .tile-rules{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:transparent;color:#e9d19b;border:1px solid rgba(224,189,121,.52);padding:8px 10px;border-radius:9px;font-weight:700;min-height:40px;font-size:12px}
 .tile-rules:hover{background:rgba(248,209,132,.10)}
 @media(max-width:680px){.audio-settings>summary{padding:0 8px;font-size:11px}.audio-settings>summary span{display:none}.audio-settings-panel{top:76px}.audio-settings-panel .sound-status{font-size:12px}}
+
+/* Phase 23 — compact, TV-safe host controls for group game nights. */
+.host-controls{background:linear-gradient(120deg,rgba(11,51,54,.97),rgba(21,65,61,.92));border:1px solid #c0a56b;border-radius:16px;padding:16px 18px;margin:12px 0;color:#e9eadc}
+.host-controls .eyebrow{font-size:11px;letter-spacing:.16em;color:#ffe3a5;font-weight:800}
+.host-buttons{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0}
+.host-buttons .btn{min-height:44px;font-size:12px;padding:10px 13px}
+.host-help{font-size:12px;line-height:1.6;color:#cde1d6;margin:4px 0 0}
+.table-paused{padding:15px 20px;background:#995f1d;color:#fff8e2;border:2px solid #f2c06e;border-radius:13px;font-weight:850;margin:13px 0;text-align:center}
+@media(max-width:450px){.host-buttons{display:grid;grid-template-columns:1fr}.host-controls{padding:12px}.host-buttons .btn{width:100%;font-size:13px}}

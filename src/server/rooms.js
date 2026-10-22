@@ -17,6 +17,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const validActionId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{12,90}$/.test(id);
 const ACTION_HISTORY_LIMIT = 80;
 export const MAX_STREAMS_PER_SEAT = 3;
+export const MAX_TV_STREAMS = 8;
 const token = () => randomBytes(32).toString('base64url');
 const roomCode = () => Array.from({length:6},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');
 
@@ -108,7 +109,7 @@ export class RoomStore {
       for(const record of parsed.rooms ?? []) {
         if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=(record.maxPlayers??2) && this.now()-record.updated<7*86400e3) {record.maxPlayers??=2;
           if(record.maxPlayers!==2&&(!GROUP_MODES.has(record.mode)||record.format==='mixed'||record.maxPlayers>6))continue;
-          record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=Array(record.players.length).fill(false);this.rooms.set(record.code,record);}
+          record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=Array(record.players.length).fill(false);record.paused??=false;record.tvEnabled??=false;this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
@@ -149,7 +150,7 @@ export class RoomStore {
   canSubscribe(code,seat) {
     // At most three streaming tabs per authenticated seat; other players are unaffected.
     const subscribers=this.listeners.get(code);
-    return !subscribers || [...subscribers].filter(entry=>entry.seat===seat).length<MAX_STREAMS_PER_SEAT;
+    return !subscribers || [...subscribers].filter(entry=>entry.seat===seat).length<(seat===-1?MAX_TV_STREAMS:MAX_STREAMS_PER_SEAT);
   }
   subscribe(code,fn,seat=null) {
     if(!this.canSubscribe(code,seat))throw Error('Too many open table connections. Close unused tabs.');
@@ -188,7 +189,7 @@ export class RoomStore {
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,startMode:mode,format,maxPlayers,matchLength,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
+    const room={code,mode,startMode:mode,format,maxPlayers,matchLength,paused:false,tvEnabled:false,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
     });
   }
@@ -206,7 +207,7 @@ export class RoomStore {
     room.game=securelyDeal(this.createGame(room.mode,seed,room.players.length,room.format==='mixed'?'full':room.matchLength));
     room.game.players.forEach((p,i)=>{p.name=room.players[i].name;});
     room.game.log=[`Private table ready: ${room.players.map(p=>p.name).join(', ')}.`];
-    room.status='playing';room.rematchVotes=Array(room.players.length).fill(false);
+    room.status='playing';room.paused=false;room.rematchVotes=Array(room.players.length).fill(false);
     room.series=createSeries(1,room.players.length);
   }
   async join(code,details) {
@@ -236,9 +237,67 @@ export class RoomStore {
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
-    return {code:room.code,mode:room.mode,matchLength:room.matchLength??'full',status:room.status,revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
+    return {code:room.code,mode:room.mode,matchLength:room.matchLength??'full',status:room.status,paused:Boolean(room.paused),tvEnabled:Boolean(room.tvEnabled),revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageKind};
+  }
+  /** A completely separate, allowlisted projection for TV. Never reuse projectGame here:
+   * projectGame intentionally reveals an authenticated player's private hand. */
+  spectatorView(code,credential) {
+    const room=this._find(code);
+    if(!room.tvEnabled||!room.tvTokenHash||typeof credential!=='string'||credential.length<30||credential.length>100||hash(credential)!==room.tvTokenHash)
+      throw Error('The TV link is invalid or has been revoked. Ask the host for a new link.');
+    const game=room.game;
+    const playerPublic=(p,i)=>({
+      seat:i,name:room.players[i].name,avatar:room.players[i].avatar,
+      connected:[...(this.listeners.get(code)??[])].some(entry=>entry.seat===i),
+      handCount:Array.isArray(p.hand)?p.hand.length:null,
+      rackCount:Array.isArray(p.rack)?p.rack.length:null,
+      stockCount:Array.isArray(p.stock)?p.stock.length:null,
+      mission:Number.isInteger(p.mission)?p.mission:null,
+      score:Number.isFinite(p.score)?p.score:null,
+      laidDown:Boolean(p.laidDown),
+      // Only card faces marked revealed/cleared by the engine are public.
+      ...(game.kind==='low'?{grid:p.grid.map(c=>({revealed:Boolean(c.revealed||c.cleared),cleared:Boolean(c.cleared),value:c.revealed&&!c.cleared?c.value:null}))}:{}),
+      ...(game.kind==='sequence'?{discards:p.discards.map(d=>({count:d.length,top:d.at(-1)??null}))}:{})
+    });
+    return {
+      code:room.code,mode:room.mode,status:room.status,paused:Boolean(room.paused),
+      revision:room.revision,maxPlayers:room.maxPlayers,series:publicSeries(room),
+      players:game?game.players.map(playerPublic):room.players.map((p,i)=>({seat:i,name:p.name,avatar:p.avatar,connected:false})),
+      board:game?{
+        kind:game.kind,active:game.active,winner:game.winner,roundWinner:game.roundWinner??null,
+        round:game.round??null,turn:game.turn??null,step:game.step??null,
+        activeSuit:game.activeSuit??null,drawCount:game.draw?.length??0,
+        discardTop:game.discard?.at(-1)??null,
+        builds:game.kind==='sequence'?game.builds:null,
+        groups:game.kind==='tiles'?game.groups:null,
+        melds:game.kind==='contract'&&game.mode==='contract-club'?(game.melds??[]):null,
+        finalRackPoints:game.winner!==null&&game.kind==='tiles'?(game.finalRackPoints??null):null
+      }:null
+    };
+  }
+  async hostAction(code,credential,action) {
+    return this._exclusive(async()=>{
+      const {room,seat}=this._auth(code,credential);
+      if(seat!==0)throw Error('Only the host can manage this table.');
+      if(!action||typeof action!=='object'||Array.isArray(action))throw Error('Invalid host action.');
+      if(!['pause','resume','tv-create','tv-disable'].includes(action.type))throw Error('Unknown host action.');
+      if(action.revision!==room.revision)throw Error('The table changed before your action. Please try again.');
+      let watchKey=null;
+      if(action.type==='pause'||action.type==='resume') {
+        if(room.status!=='playing'||!room.game||room.game.winner!==null)throw Error('Only an active table can be paused or resumed.');
+        const paused=action.type==='pause';
+        if(room.paused===paused)throw Error(paused?'Table is already paused.':'Table is not paused.');
+        room.paused=paused;
+      } else if(action.type==='tv-create') {
+        // A fresh credential revokes every previously shared TV link.
+        watchKey=token();room.tvTokenHash=hash(watchKey);room.tvEnabled=true;
+      } else {room.tvEnabled=false;room.tvTokenHash=null;}
+      room.updated=this.now();room.revision++;
+      await this.save();this.notify(code);
+      return {view:this.view(code,credential),...(watchKey?{watchKey}:{})};
+    });
   }
   async move(code,credential,action) {
     return this._exclusive(async()=>{
@@ -265,6 +324,7 @@ export class RoomStore {
       acknowledge();room.revision++;room.updated=this.now();await this.save();this.notify(code);
       return this.view(code,credential);
     }
+    if(room.paused)throw Error('The host has paused the table. Please wait for the host to resume.');
     if(!room.game)throw Error('Wait for your friend to join before playing.');
     const game=room.game;
     if(action.type==='rematch-request'||action.type==='rematch-cancel') {

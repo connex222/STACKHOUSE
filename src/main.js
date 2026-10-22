@@ -299,9 +299,18 @@ function activeStorageNotice(){
  if(storage==='filesystem-only')return '<p class="room-small room-storage-warning" role="status">Restart recovery is available only if the host has configured persistent disk storage.</p>';
  return '';
 }
+function hostTableControls() {
+ if(!isOnline()||ui.online.view?.seat!==0)return '';
+ const view=ui.online.view,canPause=view.status==='playing'&&ui.game?.winner===null;
+ return `<section class="host-controls" aria-label="Host controls"><div class="eyebrow">HOST CONTROLS · GAMES NIGHT</div>
+ <div class="host-buttons"><button class="btn btn-outline" data-action="host-tv-create">${view.tvEnabled?'Replace TV link':'Create TV display link'}</button>
+ ${view.tvEnabled?'<button class="btn btn-ghost" data-action="host-tv-disable">Disable TV link</button>':''}
+ ${canPause?`<button class="btn btn-outline" data-action="host-${view.paused?'resume':'pause'}">${view.paused?'▶ Resume table':'Ⅱ Pause table'}</button>`:''}</div>
+ <p class="host-help">TV displays show scores, turns and shared cards only — never private hands. Replacing or disabling a TV link revokes the previous one.</p></section>`;
+}
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${seriesBoard()}${opponentRail()}${activeStorageNotice()}${tableGuide()}`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${ui.online?.view?.paused?'<div class="table-paused" role="status">⏸ The host has paused this table. Moves are temporarily locked.</div>':''}${seriesBoard()}${hostTableControls()}${opponentRail()}${activeStorageNotice()}${tableGuide()}`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();
@@ -602,12 +611,12 @@ function roomScreen() {
   if(ui.online && ui.online.view.status==='waiting') {
     const room=ui.online.view;
     return `<main id="main-content" tabindex="-1" class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · ${room.series?.format==='mixed'?'GAMES NIGHT MIX':'SINGLE GAME'} · WAITING FOR PLAYERS</div>
-    <h1>Your table is ready.</h1><p>Share the invitation with your friends. Every player gets a private hand and their own turn.</p>
+    <h1>Your table is ready.</h1><p>Share the invitation with your friends. Every player gets a private hand and their own turn. The host can also open a safe read-only display on a TV.</p>
     <div class="room-code" aria-label="Room code ${room.code}">${room.code}</div>
     <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}${room.players.length<room.maxPlayers?`<div class="room-player room-empty">${icon('people',25)}<b>${room.players.length} of ${room.maxPlayers} seats filled</b><span>Waiting for more friends</span></div>`:''}</div>
     ${room.seat===0&&room.maxPlayers>2&&room.players.length>=3?'<button class="btn btn-primary" data-action="room-start">Start game now</button>':''}<button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
     <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · ${room.maxPlayers} seats available. ${room.maxPlayers>2?'Host can start with 3 or more players.':'Game starts when your friend joins.'}</p>
-    ${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
+    ${hostTableControls()}${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
   }
   const joining=Boolean(ui.roomCode);
   return `<main id="main-content" tabindex="-1" class="room-page"><section class="room-panel"><div class="eyebrow">THE PRIVATE LOUNGE</div>
@@ -708,6 +717,26 @@ async function withRoomAction(action) {
       toast(err.message,true);
     }
   } finally {current.pending=false;}
+}
+async function hostTableButton(action) {
+ if(!ui.online||ui.online.view?.seat!==0)return;
+ const room=ui.online,types={'host-pause':'pause','host-resume':'resume','host-tv-create':'tv-create','host-tv-disable':'tv-disable'};
+ if(!types[action]||room.pending)return;
+ room.pending=true;
+ try {
+   const result=await callRoom(`/api/rooms/${room.code}/host`,{method:'POST',token:room.token,body:{type:types[action],revision:room.view.revision}});
+   if(ui.online!==room)return;
+   syncRoom(result.view);
+   if(result.watchKey){
+     // The credential is in the fragment, not a query parameter or a server log.
+     const url=`${location.origin}/tv.html#room=${encodeURIComponent(room.code)}&key=${encodeURIComponent(result.watchKey)}`;
+     try{await navigator.clipboard.writeText(url);toast('TV display link copied. Open it on your TV or laptop.');}
+     catch{window.prompt('Copy this TV-only spectator link:',url);}
+   }else toast(action==='host-pause'?'Table paused.':action==='host-resume'?'Table resumed.':'TV link disabled.');
+ }catch(error){
+   try{const view=await callRoom(`/api/rooms/${room.code}/state`,{token:room.token});if(ui.online===room)syncRoom(view);}catch{}
+   toast(error.message,true);
+ }finally{room.pending=false;}
 }
 async function roomButton(action,control) {
   try {
@@ -828,6 +857,7 @@ app.addEventListener('keydown',event=>{
 app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
   const action=control.dataset.action;
+  if(['host-pause','host-resume','host-tv-create','host-tv-disable'].includes(action)){event.stopImmediatePropagation();hostTableButton(action);return;}
   if(['room-open','room-switch','room-invite','room-start','room-host','room-join'].includes(action)){
     event.stopImmediatePropagation();roomButton(action,control);return;
   }
