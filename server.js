@@ -3,12 +3,15 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RoomStore } from './src/server/rooms.js';
+import { connectPostgresSnapshot } from './src/server/postgres-storage.js';
 
 const root=path.dirname(fileURLToPath(import.meta.url));
 const allowed=new Set(['.html','.css','.js','.webp','.png','.json','.svg','.ico','.txt']);
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.webp':'image/webp','.png':'image/png','.json':'application/json','.svg':'image/svg+xml','.ico':'image/x-icon','.txt':'text/plain'};
 const port=Number(process.env.PORT||4173);
-const store=new RoomStore({storageFile:process.env.ROOM_DATA_FILE||null});
+if(process.env.DATABASE_URL && process.env.ROOM_DATA_FILE)throw Error('Use DATABASE_URL or ROOM_DATA_FILE, not both.');
+const snapshotStore=process.env.DATABASE_URL?await connectPostgresSnapshot(process.env.DATABASE_URL):null;
+const store=new RoomStore({storageFile:process.env.ROOM_DATA_FILE||null,snapshotStore});
 await store.load();
 const json=(res,status,body)=>{
   res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store',
@@ -40,7 +43,7 @@ const server=createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     const pathname=decodeURIComponent(url.pathname);
-    if(pathname==='/health')return json(res,200,{ok:true,service:'stackhouse-social',multiplayer:true});
+    if(pathname==='/health')return json(res,200,{ok:true,service:'stackhouse-social',multiplayer:true,storage:store.storageKind,durableStorage:store.storageKind==='postgres'});
     if(pathname.startsWith('/api/')) {
       if(limited(req))return json(res,429,{error:'Too many requests. Please try again shortly.'});
       if(req.method==='POST'&&pathname==='/api/rooms')return json(res,201,await store.create(await readJson(req)));
@@ -79,10 +82,12 @@ const server=createServer(async(req,res)=>{
     res.end(data);
   } catch(err) {
     if(res.headersSent){res.end();return;}
-    const status=/access denied|session does not belong/i.test(err.message)?401
+    const status=/snapshot conflict|database has not been loaded|temporarily unavailable/i.test(err.message)?503
+      :/access denied|session does not belong/i.test(err.message)?401
       :/room not found/i.test(err.message)?404
       :/table changed|already used/i.test(err.message)?409:400;
-    json(res,status,{error:err.message||'Request failed.'});
+    if(status===503)console.error('Room persistence failure:',err.message);
+    json(res,status,{error:status===503?'The saved table is temporarily unavailable. Please try again shortly.':err.message||'Request failed.'});
   }
 });
 server.listen(port,'0.0.0.0',()=>console.log(`Stackhouse Social multiplayer running on port ${port}`));

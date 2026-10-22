@@ -176,3 +176,6 @@
 .bot-level-section .bot-level-select{max-width:200px;min-height:44px}
 .bot-level-section p{width:100%;margin:0;color:#bdcdca;font-size:.85rem}
 @media(max-width:600px){.bot-level-section{margin:0 1rem 1rem;padding:1rem}.bot-level-section .bot-level-select{flex:1;min-width:150px}}
+
+/* Phase 11: clear, non-alarming recovery limitation in the waiting lobby */
+.room-storage-warning{border-left:3px solid #e2b661;padding:8px 12px;background:rgba(226,182,97,.10);color:#ffdda3;border-radius:5px;}

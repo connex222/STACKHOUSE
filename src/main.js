@@ -483,7 +483,8 @@ function roomScreen() {
     <div class="room-code" aria-label="Room code ${room.code}">${room.code}</div>
     <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}<div class="room-player room-empty">${icon('people',25)}<b>Waiting for player two</b><span>The game starts when they join</span></div></div>
     <button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
-    <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · Invite codes are private, and only two players can take seats.</p></section></main>`;
+    <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · Invite codes are private, and only two players can take seats.</p>
+    ${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
   }
   const joining=Boolean(ui.roomCode);
   return `<main class="room-page"><section class="room-panel"><div class="eyebrow">THE PRIVATE LOUNGE</div>

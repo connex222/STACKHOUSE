@@ -9,7 +9,7 @@ async function port() {
 }
 async function serverFixture() {
   const p=await port();
-  const child=spawn(process.execPath,['server.js'],{cwd:process.cwd(),env:{...process.env,PORT:String(p),ROOM_DATA_FILE:''},stdio:'pipe'});
+  const child=spawn(process.execPath,['server.js'],{cwd:process.cwd(),env:{...process.env,PORT:String(p),ROOM_DATA_FILE:'',DATABASE_URL:''},stdio:'pipe'});
   const base=`http://127.0.0.1:${p}`;
   for(let i=0;i<100;i++) {
     if(child.exitCode!==null)throw Error('Web server crashed');

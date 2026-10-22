@@ -89,29 +89,55 @@ export function projectGame(game, seat) {
 
 /** In-process private room registry; optional snapshot file for restart persistence. */
 export class RoomStore {
-  constructor({storageFile=null, now=()=>Date.now()}={}) {
-    this.rooms=new Map(); this.storageFile=storageFile;this.now=now;
-    this.listeners=new Map();this.pendingWrite=Promise.resolve();
+  constructor({storageFile=null, snapshotStore=null, now=()=>Date.now()}={}) {
+    if(storageFile && snapshotStore) throw Error('Configure one room storage backend, not two.');
+    this.rooms=new Map(); this.storageFile=storageFile;this.snapshotStore=snapshotStore;this.now=now;
+    this.storageKind=snapshotStore?'postgres':storageFile?'filesystem-only':'memory-only';
+    this.listeners=new Map();this.pendingWrite=Promise.resolve();this.operationQueue=Promise.resolve();
   }
   async load() {
-    if(!this.storageFile) return;
+    if(!this.storageFile && !this.snapshotStore) return;
     try {
-      const parsed=JSON.parse(await readFile(this.storageFile,'utf8'));
+      const stored=this.snapshotStore ? await this.snapshotStore.load() : JSON.parse(await readFile(this.storageFile,'utf8'));
+      if(!stored) return;
+      const parsed=stored;
       for(const record of parsed.rooms ?? []) {
         if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=2 && this.now()-record.updated<7*86400e3) {record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=[false,false];this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
   save() {
-    if(!this.storageFile) return Promise.resolve();
-    const snapshot=JSON.stringify({version:2,rooms:[...this.rooms.values()]});
+    if(!this.storageFile && !this.snapshotStore) return Promise.resolve();
+    const snapshot={version:3,rooms:[...this.rooms.values()]};
+    // A persistence failure MUST reject the action rather than silently claiming it was saved.
     this.pendingWrite=this.pendingWrite.catch(()=>{}).then(async()=>{
+      if(this.snapshotStore) return this.snapshotStore.save(snapshot);
       await mkdir(dirname(this.storageFile),{recursive:true});
       const temp=`${this.storageFile}.${process.pid}.tmp`;
-      await writeFile(temp,snapshot,{mode:0o600});
+      await writeFile(temp,JSON.stringify(snapshot),{mode:0o600});
       await rename(temp,this.storageFile);
     });
-    return this.pendingWrite;
+    return this.pendingWrite.catch(error=>{
+      console.error('Room snapshot write failed:',error.message);
+      throw Error('Room storage is temporarily unavailable. Please try again.');
+    });
+  }
+  async _exclusive(operation) {
+    // Serialise every room mutation, including joins and rematch votes. Two simultaneous
+    // moves based on the same revision cannot both be accepted.
+    const previous=this.operationQueue;
+    let release;
+    this.operationQueue=new Promise(resolve=>{release=resolve;});
+    await previous;
+    const before=structuredClone([...this.rooms.entries()]);
+    try{return await operation();}
+    catch(error){
+      // A failed database/file write cannot leave the in-memory state advanced.
+      // Preserve object identity on invalid/no-op commands so an engine reference
+      // held by an active spectator is not needlessly detached.
+      if(JSON.stringify([...this.rooms.entries()])!==JSON.stringify(before))this.rooms=new Map(before);
+      throw error;
+    }finally{release();}
   }
   notify(code) {for(const entry of this.listeners.get(code)??[]) {try {entry.fn();} catch { /* closed connections */ }}}
   subscribe(code,fn,seat=null) {
@@ -136,6 +162,7 @@ export class RoomStore {
     return {room,seat};
   }
   async create({mode,name,avatar,format='single'}) {
+    return this._exclusive(async()=>{
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
     if(!MODES.has(mode)) throw Error('Choose one of the available games.');
@@ -145,6 +172,7 @@ export class RoomStore {
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
     const room={code,mode,startMode:mode,format,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:[false,false],recentActions:[],gameNumber:1,series:createSeries()};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
+    });
   }
   createGame(mode,seed) {
     if(mode==='tile-royale')return createTileGame({mode,seed});
@@ -155,6 +183,7 @@ export class RoomStore {
     return createContractGame({mode,seed});
   }
   async join(code,{name,avatar}) {
+    return this._exclusive(async()=>{
     const room=this._find(code);
     if(room.status!=='waiting'||room.players.length!==1)throw Error('This room is not accepting players.');
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
@@ -167,14 +196,16 @@ export class RoomStore {
     room.game.log=[`Private table ready: ${room.players[0].name} versus ${room.players[1].name}.`];
     await this.save();this.notify(code);
     return {code,token:credential,seat:1,view:this.view(code,credential)};
+    });
   }
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
     return {code:room.code,mode:room.mode,status:room.status,revision:room.revision,seat,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
       players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
-      storage:this.storageFile?'filesystem-only':'memory-only'};
+      storage:this.storageKind};
   }
   async move(code,credential,action) {
+    return this._exclusive(async()=>{
     const {room,seat}=this._auth(code,credential);
     if(!action || typeof action!=='object'||Array.isArray(action))throw Error('Invalid action.');
     // A retry with the same action ID is acknowledged but never played again, even after a
@@ -298,5 +329,6 @@ export class RoomStore {
     acknowledge();room.revision++;room.updated=this.now();
     await this.save();this.notify(code);
     return this.view(code,credential);
+    });
   }
 }

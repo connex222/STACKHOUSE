@@ -126,3 +126,7 @@ The provided `render.yaml` specifies a **Node web service**, not a static websit
 1. End-to-end multiplayer acceptance on two actual phones (including reconnects, switching Wi-Fi/mobile networks and stale moves).
 2. Production hardening: reliability under concurrency, longer-term persistence, abuse protection, accessibility and extra browser coverage.
 3. Optional enhancements: animations, game history/rematches, more skillful AI, house-rule selectors, and room hosting refinements.
+
+
+## Phase 11 (v1.1.0)
+See [README_PHASE11.md](README_PHASE11.md) for the opt-in PostgreSQL durable-room backend, concurrency safeguards, deployment conditions and real-phone acceptance checklist. The existing Render service is **memory-only until DATABASE_URL is configured**; no new database has been provisioned.

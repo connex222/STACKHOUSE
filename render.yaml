@@ -6,5 +6,7 @@ services:
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /health
-    # Note: session snapshots persist across restarts only when ROOM_DATA_FILE
-    # points to a real persistent volume. An ephemeral instance won't retain them.
+    # Phase 11: opt-in PostgreSQL persistence is activated by the secret
+    # DATABASE_URL environment variable (configure directly in Render).
+    # ROOM_DATA_FILE works only with a genuinely persistent disk.
+    # Without either setting, rooms are deliberately memory-only.
