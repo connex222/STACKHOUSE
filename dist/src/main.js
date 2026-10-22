@@ -1,5 +1,6 @@
 import { sessionSeed } from './rng.js';
 import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-order.js';
+import {SOLO_SAVE_KEY,encodeSoloSave,decodeSoloSave} from './solo-save.js';
 import { createSequenceGame, sequencePileTargets, playSequenceCard, discardSequenceCard, runSequenceBot } from './engine/sequence.js';
 import { createRackGame, rackDraw, rackReplace, rackDiscard, runRackBot } from './engine/rack.js';
 import { createContractGame, currentMission, missionDescription, findContract, drawContractCard, discardContractCard, layContract, nextContractRound, runContractBot, MISSION_SETS } from './engine/contracts.js';
@@ -25,8 +26,36 @@ const games = [
 ];
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
-  soundOn:localStorage.getItem('stackhouse.sound')==='true',lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:''};
+  soundOn:localStorage.getItem('stackhouse.sound')==='true',lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[]};
 const app=document.getElementById('app');
+// Browser storage can be disabled (e.g. privacy mode). The games still work.
+function savedSolo(){try{return decodeSoloSave(localStorage.getItem(SOLO_SAVE_KEY));}catch{return null;}}
+function saveSolo(){
+ if(ui.online||!ui.mode||!ui.game)return;
+ try {localStorage.setItem(SOLO_SAVE_KEY,encodeSoloSave({mode:ui.mode,game:ui.game,handOrders:ui.handOrders}));}
+ catch { /* Storage is optional; never block a card move. */ }
+}
+function resumeSolo(){
+ const save=savedSolo();if(!save)return toast('No saved solo match was found.',true);
+ stopOnline();ui.mode=save.mode;ui.game=save.game;ui.handOrders=save.handOrders;
+ ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.selected=null;ui.modal=null;
+ ui.screen='game';ui.lowAction='replace';sound('card');render();
+ window.scrollTo({top:0,behavior:'instant'});
+}
+function pushOrderUndo(zone){
+ if(Array.isArray(ui.handOrders[zone])){
+  ui.orderUndo.push({zone,order:[...ui.handOrders[zone]]});
+  if(ui.orderUndo.length>20)ui.orderUndo.shift();
+ }
+}
+function undoHandOrder(){
+ const previous=ui.orderUndo.pop();if(!previous)return;
+ const cards=previous.zone==='tiles'?ui.game?.players[0]?.rack:ui.game?.players[0]?.hand;
+ if(!cards)return;
+ ui.handOrders[previous.zone]=reconcileHandOrder(previous.order,cards);
+ ui.arrangeFrom=null;ui.orderMessage='Last hand arrangement undone.';
+ saveSolo();sound('card');render();
+}
 const isOnline=()=>Boolean(ui.online);
 const opponentProfile=()=>ui.online?.view?.players?.[1-ui.online.seat];
 const opponentName=()=>opponentProfile()?.name||'House Bot';
@@ -87,12 +116,13 @@ function header() {
     </nav></header>`;
 }
 function homeScreen() {
+ const resume=savedSolo();
  return `<main class="home-page"><section class="hero" aria-label="Welcome to Stackhouse Social">
    <div class="hero-content"><div class="eyebrow"><span class="diamond">◆</span> WELCOME TO THE HOUSE</div>
      <h1>Good cards.<br><em>Great company.</em></h1>
      <p>Ten classic-inspired card battles, one spectacular place to play. Pull up a chair, pick your avatar and own the table.</p>
      <div class="hero-buttons"><button class="btn btn-primary" data-action="scroll-games">Choose your game ${icon('arrow')}</button>
-       <button class="btn btn-ghost" data-action="room-open">Play with friends</button></div>
+       <button class="btn btn-ghost" data-action="room-open">Play with friends</button>${resume?`<button class="btn btn-outline" data-action="solo-resume">Continue ${escapeHtml(games.find(g=>g.id===resume.mode)?.title||'solo match')}</button>`:''}</div>
      <div class="hero-highlights"><div><b>10</b><small>PLAYABLE TABLES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>01</b><small>HOUSE TO CALL HOME</small></div></div>
    </div>
  </section>
@@ -146,10 +176,14 @@ function getOrderedHand(zone,cards){
  return ui.handOrders[zone].map((key,pos)=>({item:cards[keys.indexOf(key)],index:keys.indexOf(key),key,pos}));
 }
 function handToolbar(zone){
+ const cards=zone==='tiles'?ui.game?.players[0]?.rack:ui.game?.players[0]?.hand;
+ const hasColour=cards?.some(card=>card&&(card.colour||card.suit));
  return `<div class="hand-organiser" aria-label="Arrange your cards or tiles">
   <span class="hand-organiser-hint">${ui.arranging?'Tap one, then tap where it should go':'Drag to reorder · or use Arrange'}</span>
   <button class="arrange-toggle ${ui.arranging?'active':''}" data-action="hand-arrange" aria-pressed="${ui.arranging}">${ui.arranging?'Done arranging':'↔ Arrange'}</button>
-  <button class="arrange-sort" data-action="hand-sort" data-zone="${zone}">Sort ↑</button>
+  <button class="arrange-sort" data-action="hand-sort" data-zone="${zone}" data-sort="value">Sort ↑</button>
+  ${hasColour?`<button class="arrange-sort" data-action="hand-sort" data-zone="${zone}" data-sort="colour">Sort suit/colour</button>`:''}
+  <button class="arrange-sort" data-action="hand-undo" ${ui.orderUndo.length?'':'disabled'} aria-label="Undo last card or tile arrangement">↶ Undo</button>
  </div>`;
 }
 function handItems(zone,cards,face){
@@ -158,12 +192,12 @@ function handItems(zone,cards,face){
 function reorderHand(zone,from,to){
  const order=ui.handOrders[zone];
  if(!order||from===to||from<0||to<0||from>=order.length||to>=order.length)return false;
- ui.handOrders[zone]=moveHandToken(order,from,to);
+ pushOrderUndo(zone);ui.handOrders[zone]=moveHandToken(order,from,to);
  ui.orderMessage=`Moved item ${from+1} to position ${to+1}.`;
  ui.arrangeFrom=null;
- sound('card');render();return true;
+ saveSolo();sound('card');render();return true;
 }
-function resetArrangement(){ui.handOrders={};ui.arranging=false;ui.arrangeFrom=null;ui.orderMessage='';}
+function resetArrangement(){ui.handOrders={};ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.orderMessage='';}
 
 function sequenceScreen() {
  const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo();
@@ -295,7 +329,7 @@ function modalContent() {
 }
 function render(){
  app.innerHTML=`<div class="site-wrap">${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> HAND ARRANGEMENT UPDATE</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> SOLO SAVE & HAND CONTROLS</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private two-player tables'}</span></footer></div>
  ${modalContent()}<span class="sr-only" role="status">${escapeHtml(ui.orderMessage)}</span>${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}`;
 }
 function start(mode){
@@ -305,18 +339,18 @@ function start(mode){
  ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;resetArrangement();
  const seed=sessionSeed();
    ui.game=found.kind==='sequence'?createSequenceGame({mode,seed}):found.kind==='rack'?createRackGame({mode,seed}):found.kind==='tiles'?createTileGame({mode,seed}):found.kind==='low'?createLowGame({mode,seed}):found.kind==='eights'?createEightGame({mode,seed}):createContractGame({mode,seed});
- sound('card');render();window.scrollTo({top:0,behavior:'instant'});
+ saveSolo();sound('card');render();window.scrollTo({top:0,behavior:'instant'});
 }
 function checkBotTurn(){
  if(isOnline())return;
  if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
  ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game):ui.game.kind==='rack'?runRackBot(ui.game):ui.game.kind==='tiles'?runTileBot(ui.game):ui.game.kind==='low'?runLowBot(ui.game):ui.game.kind==='eights'?runEightBot(ui.game):runContractBot(ui.game);
- sound('card');render();
+ saveSolo();sound('card');render();
 }
 function runResult(result,botAfter=false){
  if(result.error){toast(result.error,true);return;}
  ui.game=result.state;ui.selected=null;
- sound(ui.game.winner!==null||ui.game.roundWinner!=null?'success':'card');render();
+ saveSolo();sound(ui.game.winner!==null||ui.game.roundWinner!=null?'success':'card');render();
  if(botAfter)checkBotTurn();
 }
 
@@ -497,11 +531,12 @@ app.addEventListener('click',event=>{
  swallowDragClick=0;
  const control=event.target.closest('[data-action]');if(!control)return;
  const action=control.dataset.action;
- if(['hand-arrange','hand-sort'].includes(action)){
+ if(['hand-arrange','hand-sort','hand-undo'].includes(action)){
   event.stopImmediatePropagation();event.preventDefault();
+  if(action==='hand-undo'){undoHandOrder();return;}
   if(action==='hand-arrange'){ui.arranging=!ui.arranging;ui.arrangeFrom=null;}
   else {const zone=control.dataset.zone,cards=zone==='tiles'?ui.game?.players[0]?.rack:ui.game?.players[0]?.hand;
-   if(!cards)return;ui.handOrders[zone]=sortHandOrder(cards);ui.orderMessage='Hand sorted by number.';ui.arrangeFrom=null;}
+   if(!cards)return;getOrderedHand(zone,cards);pushOrderUndo(zone);ui.handOrders[zone]=sortHandOrder(cards,control.dataset.sort==='colour'?'colour':'value');ui.orderMessage=control.dataset.sort==='colour'?'Hand sorted by suit or colour.':'Hand sorted by number.';ui.arrangeFrom=null;saveSolo();}
   sound();render();return;
  }
  const piece=control.closest?.('.hand-piece[data-order-zone]');
@@ -575,7 +610,7 @@ app.addEventListener('click',event=>{
  if(!control)return;
  const action=control.dataset.action;
  if(action==='dismiss'&&event.target!==control)return;
- if(['home','scroll-games','avatars','toggle-sound','close','dismiss','choose-avatar','start','restart','rules','next-round'].includes(action)) {
+ if(['home','scroll-games','avatars','toggle-sound','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
    switch(action){
      case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
@@ -585,6 +620,7 @@ app.addEventListener('click',event=>{
      case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sound();render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
      case 'start':start(control.dataset.mode);break;
+     case 'solo-resume':resumeSolo();break;
      case 'restart':start(ui.mode);break;
      case 'next-round':runResult(ui.game.kind==='low'?lowNextRound(ui.game):nextContractRound(ui.game),true);break;
    }

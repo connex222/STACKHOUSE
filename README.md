@@ -1,4 +1,14 @@
-# STACKHOUSE SOCIAL — Phase 4: Ten Tables
+# STACKHOUSE SOCIAL — Ten Tables (Phase 6: Save and Organise)
+
+## Phase 6: Resume games and improved hand organisation
+
+- **Continue solo match:** Every legal move, bot turn and new match is saved automatically in this browser. The home page offers **Continue [game]** after refreshing or coming back. A new solo match replaces the previous saved match. Saved progress remains on that device/browser and is not shared with online opponents.
+- **Arrange → Undo:** Repositioned, automatically sorted or touch-arranged cards/tiles can be restored to the previous arrangement using **↶ Undo** (up to 20 changes per match). Undo affects only visual ordering and can never undo a played card or server action.
+- **Sort suit/colour:** Where available, organise your hand by suit or colour as well as the existing number sort. Number Ladder and Low Glow retain fixed slot layouts.
+- **Private rooms:** Online matches continue to use server-authoritative state; local save/reordering never changes server cards or turns. Room reconnection is still supported separately.
+- **Validation:** Tests include state snapshot round-trip, bad/old/corrupted saves, and UI controls. Browsers with local storage disabled can still play; resume is unavailable in that case.
+
+
 
 ## Hand and tile reordering — Phase 4.1
 

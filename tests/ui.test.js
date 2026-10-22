@@ -17,7 +17,7 @@ test('front-end renders branded lobby, private room form and bot gameplay in a D
   assert.match(app.innerHTML,/16/);
   const click=(action,extra={})=>{
     const control={dataset:{action,...extra}};
-    const event={target:{closest:()=>control},stopImmediatePropagation(){this.stopped=true;}};
+    const event={target:{closest:()=>control},stopImmediatePropagation(){this.stopped=true;},preventDefault(){this.prevented=true;}};
     for(const entry of listeners.filter(x=>x.type==='click'&&x.capture))entry.fn(event);
     if(!event.stopped)for(const entry of listeners.filter(x=>x.type==='click'&&!x.capture))entry.fn(event);
   };
@@ -27,6 +27,15 @@ test('front-end renders branded lobby, private room form and bot gameplay in a D
   click('room-switch');assert.match(app.innerHTML,/Join a friend/);
   click('home');assert.match(app.innerHTML,/Good cards/);
   click('start',{mode:'stack-run'});
+  assert.match(app.innerHTML,/SHARED BUILDING STACKS/);
+  assert.ok(memory.has('stackhouse.solo.v1'),'Active solo games are saved');
+  click('hand-sort',{zone:'sequence',sort:'value'});
+  assert.match(app.innerHTML,/Undo/);
+  click('hand-undo');
+  assert.match(app.innerHTML,/SHARED BUILDING STACKS/);
+  click('home');
+  assert.match(app.innerHTML,/Continue Stack Run/);
+  click('solo-resume');
   assert.match(app.innerHTML,/SHARED BUILDING STACKS/);
   click('home');click('start',{mode:'phase-quest'});
   assert.match(app.innerHTML,/CURRENT CONTRACT/);
@@ -41,6 +50,9 @@ test('front-end renders branded lobby, private room form and bot gameplay in a D
   click('low-draw',{from:'deck'});assert.match(app.innerHTML,/HELD CARD/);
   click('low-slot',{index:'1'});assert.match(app.innerHTML,/ROUND 1/);
   click('home');click('start',{mode:'eight-shift'});assert.match(app.innerHTML,/ACTIVE SUIT/);
+  assert.match(app.innerHTML,/Sort suit\/colour/);
+  click('hand-sort',{zone:'eights',sort:'colour'});
+  assert.match(app.innerHTML,/Undo/);
   click('eight-draw');assert.match(app.innerHTML,/Drawn this turn/);
   assert.equal(globalThis.fetch,initial);
 });
