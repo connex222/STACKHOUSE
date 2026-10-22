@@ -208,3 +208,17 @@
 .contract-score-seat small{font-size:10px;color:#c2d6ce;font-variant-numeric:tabular-nums}
 @media(max-width:600px){.group-opponents{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.group-opponent{padding:9px 8px;gap:6px}.group-opponent img{width:31px;height:31px}.group-opponent strong{font-size:11px}.group-opponent small{font-size:10px}.seat-turn{font-size:9px;padding:3px 4px}.contract-progress-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.contract-score-seat{padding:9px}}
 @media(prefers-reduced-motion:reduce){.group-opponent{transition:none}}
+
+/* Phase 15 — small-screen and keyboard release polish. */
+:where(button,a,select,input):focus-visible{outline:3px solid #9affda;outline-offset:3px}
+:where(.tile-play,.arrange-toggle,.arrange-sort,.room-submit,.room-input){min-height:44px}
+.group-opponents .seat-info{min-width:0;overflow-wrap:anywhere}
+@media(max-width:370px){
+  .group-opponents{grid-template-columns:1fr 1fr;gap:5px}
+  .group-opponent{padding:7px 6px;gap:5px}
+  .group-opponent img{width:29px;height:29px}
+  .group-opponent small{font-size:9px}
+  .contract-score-seat{padding:7px}
+  .game-heading-actions .btn{padding-inline:10px;min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.game-tile:hover,.btn:not(:disabled):hover{transform:none}}

@@ -16,6 +16,7 @@ const validCode = code => /^[A-Z2-9]{6}$/.test(code ?? '');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const validActionId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{12,90}$/.test(id);
 const ACTION_HISTORY_LIMIT = 80;
+export const MAX_STREAMS_PER_SEAT = 3;
 const token = () => randomBytes(32).toString('base64url');
 const roomCode = () => Array.from({length:6},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');
 
@@ -144,7 +145,13 @@ export class RoomStore {
     }finally{release();}
   }
   notify(code) {for(const entry of this.listeners.get(code)??[]) {try {entry.fn();} catch { /* closed connections */ }}}
+  canSubscribe(code,seat) {
+    // At most three streaming tabs per authenticated seat; other players are unaffected.
+    const subscribers=this.listeners.get(code);
+    return !subscribers || [...subscribers].filter(entry=>entry.seat===seat).length<MAX_STREAMS_PER_SEAT;
+  }
   subscribe(code,fn,seat=null) {
+    if(!this.canSubscribe(code,seat))throw Error('Too many open table connections. Close unused tabs.');
     const subscribers=this.listeners.get(code)??new Set();
     const entry={fn,seat};subscribers.add(entry);this.listeners.set(code,subscribers);this.notify(code);
     return ()=>{subscribers.delete(entry);if(!subscribers.size)this.listeners.delete(code);this.notify(code);};
@@ -165,7 +172,9 @@ export class RoomStore {
     if(seat<0)throw Error('Access denied. That session does not belong to this room.');
     return {room,seat};
   }
-  async create({mode,name,avatar,format='single',maxPlayers=2}) {
+  async create(options) {
+    if(!options||typeof options!=='object'||Array.isArray(options))throw Error('Invalid room settings.');
+    let {mode,name,avatar,format='single',maxPlayers=2}=options;
     return this._exclusive(async()=>{
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
@@ -197,7 +206,9 @@ export class RoomStore {
     room.status='playing';room.rematchVotes=Array(room.players.length).fill(false);
     room.series=createSeries(1,room.players.length);
   }
-  async join(code,{name,avatar}) {
+  async join(code,details) {
+    if(!details||typeof details!=='object'||Array.isArray(details))throw Error('Enter a player name and avatar.');
+    const {name,avatar}=details;
     return this._exclusive(async()=>{
       const room=this._find(code);
       if(room.status!=='waiting'||room.players.length>=room.maxPlayers)throw Error('This room is not accepting players.');

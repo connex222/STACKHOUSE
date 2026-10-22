@@ -13,9 +13,10 @@ if(process.env.DATABASE_URL && process.env.ROOM_DATA_FILE)throw Error('Use DATAB
 const snapshotStore=process.env.DATABASE_URL?await connectPostgresSnapshot(process.env.DATABASE_URL):null;
 const store=new RoomStore({storageFile:process.env.ROOM_DATA_FILE||null,snapshotStore});
 await store.load();
+const commonHeaders={'x-content-type-options':'nosniff','x-frame-options':'DENY',
+  'referrer-policy':'no-referrer','permissions-policy':'camera=(), microphone=(), geolocation=()'};
 const json=(res,status,body)=>{
-  res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store',
-    'x-content-type-options':'nosniff'});
+  res.writeHead(status,{...commonHeaders,'content-type':'application/json; charset=utf-8','cache-control':'no-store'});
   res.end(JSON.stringify(body));
 };
 function auth(req) {
@@ -24,9 +25,14 @@ function auth(req) {
 }
 async function readJson(req) {
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))throw Error('Send JSON requests.');
-  let text='';for await(const chunk of req) {
-    text+=chunk.toString('utf8');if(text.length>8192)throw Error('Request is too large.');
+  // Limit actual bytes, not JavaScript characters (multibyte UTF-8 can defeat a character cap).
+  let totalBytes=0;const chunks=[];
+  for await(const chunk of req) {
+    totalBytes+=chunk.length;
+    if(totalBytes>8192)throw Error('Request is too large.');
+    chunks.push(chunk);
   }
+  const text=Buffer.concat(chunks,totalBytes).toString('utf8');
   if(!text)throw Error('Request body is empty.');
   try{return JSON.parse(text);}catch {throw Error('Invalid JSON.');}
 }
@@ -44,6 +50,7 @@ const server=createServer(async(req,res)=>{
     const url=new URL(req.url,'http://localhost');
     const pathname=decodeURIComponent(url.pathname);
     if(pathname==='/health') {
+      if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{error:'Method not allowed.'});
       const databaseConnected=snapshotStore ? await snapshotStore.ping() : null;
       const ok=databaseConnected!==false;
       return json(res,ok?200:503,{
@@ -67,8 +74,10 @@ const server=createServer(async(req,res)=>{
       if(route==='events'&&req.method==='GET') {
         const credential=auth(req);const initialView=store.view(code,credential);
         // SSE over authenticated fetch (never expose player tokens in URLs).
-        res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-transform',
-          'connection':'keep-alive','x-accel-buffering':'no','x-content-type-options':'nosniff'});
+        // Cap simultaneous streams for each authenticated seat to avoid idle-connection floods.
+        if(!store.canSubscribe(code,initialView.seat))return json(res,429,{error:'Too many open table connections. Close unused tabs.'});
+        res.writeHead(200,{...commonHeaders,'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-transform',
+          'connection':'keep-alive','x-accel-buffering':'no'});
         let closed=false;
         const deliver=()=>{if(!closed)res.write(`event: state\ndata: ${JSON.stringify(store.view(code,credential))}\n\n`);};
         const unsubscribe=store.subscribe(code,deliver,initialView.seat);
@@ -88,8 +97,7 @@ const server=createServer(async(req,res)=>{
     }
     await stat(file);
     const data=await readFile(file);
-    res.writeHead(200,{'content-type':mime[path.extname(file)],'cache-control':'no-cache',
-      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+    res.writeHead(200,{...commonHeaders,'content-type':mime[path.extname(file)],'cache-control':'no-cache',
       'content-security-policy':pathname==='/PLAY-OFFLINE.html'?"default-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline'":"default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self'"});
     if(req.method==='HEAD')return res.end();
     res.end(data);
