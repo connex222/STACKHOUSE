@@ -16,18 +16,18 @@ export function createRackGame({mode='number-ladder',seed=42}={}) {
   if(isSortedRack(players[1].rack))state.winner=1;
   return state;
 }
-function recycle(state) {
+function recycle(state,reshuffle=null) {
   if(state.draw.length===0 && state.discard.length>1) {
     const top=state.discard.pop();
-    state.draw=shuffle(state.discard,mulberry32((state.seed^state.turn^0x731ab1e)>>>0));
+    state.draw=reshuffle?reshuffle(state.discard):shuffle(state.discard,mulberry32((state.seed^state.turn^0x731ab1e)>>>0));
     state.discard=[top];
   }
 }
-export function rackDraw(input,from='deck') {
+export function rackDraw(input,from='deck',reshuffle=null) {
   const state=clone(input);
   if(state.winner!==null||state.step!=='draw')return {error:'Finish your current turn first.'};
   if(!['deck','discard'].includes(from))return {error:'Choose a valid draw source.'};
-  if(from==='deck')recycle(state);
+  if(from==='deck')recycle(state,reshuffle);
   const card=from==='deck'?state.draw.pop():state.discard.pop();
   if(!card)return {error:'That pile is empty.'};
   state.held=card;
@@ -85,7 +85,7 @@ function rackExpertCost(cards){
   }
   return penalty;
 }
-export function runRackBot(input,difficulty='standard') {
+export function runRackBot(input,difficulty='standard',reshuffle=null) {
   let state=clone(input);
   if(state.active!==1||state.winner!==null)return state;
   const me=state.players[1];
@@ -96,7 +96,7 @@ export function runRackBot(input,difficulty='standard') {
   let from=top&&preview(top)<current?'discard':'deck';
   if(difficulty==='easy')from='deck';
   if(difficulty==='expert'&&top&&preview(top)<current)from='discard';
-  let outcome=rackDraw(state,from);
+  let outcome=rackDraw(state,from,reshuffle);
   if(outcome.error)return state;
   state=outcome.state;
   const costs=me.rack.map((_,i)=>cost(state.players[1].rack.map((card,j)=>j===i?state.held:card)));

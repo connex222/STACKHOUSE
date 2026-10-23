@@ -41,6 +41,6 @@ test('Sound tools are tucked into an accessible settings disclosure and help is 
  assert.match(src,/<summary aria-label="Audio settings">/);
  assert.match(src,/data-action="test-sound"/);
  assert.match(src,/data-action="test-tone"/);
- assert.match(src,/data-action="rules" data-mode="\$\{g.id\}"/);
+ assert.match(src,/data-action="rules" data-family="\$\{family.id\}"/);
  assert.match(src,/runContractBot\(ui.game,ui.botDifficulty\)/);
 });

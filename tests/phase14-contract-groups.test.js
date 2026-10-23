@@ -109,8 +109,8 @@ test('contract group series wins require unanimous rematch, and snapshots preser
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
-test('six-player room cannot be created for Number Ladder, Low Glow or mixed tournament',async()=>{
+test('six-player rooms reject two-player modes but accept group-compatible mixed tournaments',async()=>{
  const s=new RoomStore();
  for(const mode of ['number-ladder','low-glow'])await assert.rejects(s.create({...player(0),mode,maxPlayers:3}),/Group tables/);
- for(const mode of modes)await assert.rejects(s.create({...player(0),mode,maxPlayers:6,format:'mixed'}),/Group tables/);
+ for(const mode of modes)assert.equal((await s.create({...player(0),mode,maxPlayers:6,format:'mixed'})).view.series.format,'mixed');
 });

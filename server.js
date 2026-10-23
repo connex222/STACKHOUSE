@@ -116,7 +116,7 @@ const server=createServer(async(req,res)=>{
     await stat(file);
     const data=await readFile(file);
     res.writeHead(200,{...commonHeaders,'content-type':mime[path.extname(file)],'cache-control':'no-cache',
-      'content-security-policy':pathname==='/PLAY-OFFLINE.html'?"default-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline'":"default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; script-src 'self'"});
+      'content-security-policy':pathname==='/PLAY-OFFLINE.html'?"default-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; script-src 'self' 'unsafe-inline'":"default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; script-src 'self'"});
     if(req.method==='HEAD')return res.end();
     res.end(data);
   } catch(err) {

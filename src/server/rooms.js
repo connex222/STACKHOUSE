@@ -1,14 +1,12 @@
+import {getGameModule,applyGameAction} from './game-modules.js';
+import {projectGame} from './projections.js';
+export {projectGame} from './projections.js';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { createSequenceGame, playSequenceCard, discardSequenceCard, passSequenceTurn, canPassSequenceTurn, replenishSequenceHand, canReplenishSequenceHand } from '../engine/sequence.js';
-import { createContractGame, drawContractCard, discardContractCard, layContract, nextContractRound, buyShanghaiDiscard, layOffContract } from '../engine/contracts.js';
-import { createRackGame, rackDraw, rackReplace, rackDiscard } from '../engine/rack.js';
-import { createTileGame, tileLay, tileEndTurn } from '../engine/tiles.js';
-import { createLowGame, lowDraw, lowReplace, lowFlip, lowNextRound } from '../engine/lowcard.js';
-import { createEightGame, eightPlay, eightDraw, eightPass } from '../engine/eights.js';
 import {createSeries,ensureSeries,recordMatchResult,beginNextGame,publicSeries} from './series.js';
-import {tournamentFormat} from './tournament.js';
+import {tournamentFormat,GROUP_ROTATION,TOUR_ROTATION} from './tournament.js';
+import {botPersona} from '../bot-personalities.js';
 
 const GROUP_MODES = new Set(['eight-shift','stack-run','malice-duel','tile-royale','phase-quest','contract-club','crown-circuit','shanghai-nights']);
 const MODES = new Set(['stack-run','phase-quest','malice-duel','contract-club','crown-circuit','number-ladder','shanghai-nights','tile-royale','low-glow','eight-shift']);
@@ -59,38 +57,6 @@ const safeAvatar = n => {
   return n;
 };
 const restrictedIndex = (x,max=999) => Number.isInteger(x)&&x>=0&&x<=max;
-const copyPile = (cards, showTop) => cards.length ? [...Array(cards.length-1).fill(null),showTop?cards.at(-1):null]:[];
-
-/** Project one seat's view. No opponent hand, hidden stock or draw card identities are sent. */
-export function projectGame(game, seat) {
-  if(!game) return null;
-  const order=[seat,...game.players.map((_,i)=>i).filter(i=>i!==seat)];
-  const relative=index=>index===null||index===undefined||index===-1?index:order.indexOf(index);
-  const adapt = (player, owned) => game.kind==='tiles' ? ({name:player.name,rack:owned?player.rack:Array(player.rack.length).fill(null)})
-    : game.kind==='low' ? ({name:player.name,score:player.score,grid:player.grid.map(c=>c.revealed||c.cleared?{id:c.id,value:c.cleared?null:c.value,revealed:true,cleared:c.cleared}:{id:null,value:null,revealed:false,cleared:false})})
-    : game.kind==='eights' ? ({name:player.name,hand:owned?player.hand:Array(player.hand.length).fill(null)})
-    : game.kind==='rack' ? ({name:player.name,rack:owned?player.rack:Array(player.rack.length).fill(null)}) : game.kind==='sequence' ? ({
-    name:player.name,
-    stock:copyPile(player.stock,owned),
-    hand:owned ? player.hand : Array(player.hand.length).fill(null),
-    discards:player.discards.map(p=>copyPile(p,true))
-  }) : ({name:player.name, mission:player.mission,score:player.score,laidDown:Boolean(player.laidDown),
-    hand:owned ? player.hand : Array(player.hand.length).fill(null)});
-  const shared = {kind:game.kind,mode:game.mode,active:relative(game.active),
-    winner:relative(game.winner),
-    roundWinner:relative(game.roundWinner),
-    players:order.map(i=>adapt(game.players[i],i===seat)),
-    log:game.log.slice(0,12)};
-  if(game.kind==='tiles')return {...shared,groups:game.groups,turn:game.turn,turnLimit:game.turnLimit??null,playedThisTurn:game.playedThisTurn,draw:{length:game.draw.length},finalRackPoints:game.winner===null?null:game.finalRackPoints?order.map(i=>game.finalRackPoints[i]):null};
-  if(game.kind==='low')return {...shared,round:game.round,step:game.step,held:game.active===seat?game.held:null,drawnFrom:game.active===seat?game.drawnFrom:null,closingSeat:game.closingSeat===null?null:(game.closingSeat===seat?0:1),draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  if(game.kind==='eights')return {...shared,turn:game.turn,drew:game.drew,activeSuit:game.activeSuit,draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  if(game.kind==='sequence') return {...shared, rules:game.rules,turn:game.turn,builds:game.builds,stalemate:Boolean(game.stalemate),canPass:canPassSequenceTurn(game,seat),canRefill:canReplenishSequenceHand(game,seat)};
-  if(game.kind==='rack') return {...shared,step:game.step,turn:game.turn,held:game.active===seat?game.held:null,
-    draw:{length:game.draw.length},discard:game.discard.slice(-1)};
-  return {...shared,round:game.round,step:game.step,matchLength:game.matchLength??'full',targetRounds:game.targetRounds??null,dealTurns:game.dealTurns??0,dealTurnLimit:game.dealTurnLimit??null,
-    canBuy:game.mode==='shanghai-nights'&&game.buyWindow===true&&game.active!==seat&&!game.buyUsed?.[seat]&&game.roundWinner===null&&game.winner===null,
-    draw:{length:game.draw.length},discard:game.discard,laid:game.laid,melds:game.mode==='contract-club'?(game.melds??[]).map(m=>({...m,owner:relative(m.owner)})):[]};
-}
 
 /** In-process private room registry; optional snapshot file for restart persistence. */
 export class RoomStore {
@@ -109,7 +75,12 @@ export class RoomStore {
       for(const record of parsed.rooms ?? []) {
         if(validCode(record.code) && MODES.has(record.mode) && Array.isArray(record.players) && record.players.length<=(record.maxPlayers??2) && this.now()-record.updated<7*86400e3) {record.maxPlayers??=2;
           if(record.maxPlayers!==2&&(!GROUP_MODES.has(record.mode)||record.format==='mixed'||record.maxPlayers>6))continue;
-          record.format=tournamentFormat(record.format);record.startMode??=record.mode;ensureSeries(record);record.recentActions??=[];record.rematchVotes??=Array(record.players.length).fill(false);record.paused??=false;record.tvEnabled??=false;this.rooms.set(record.code,record);}
+          record.format=tournamentFormat(record.format);record.startMode??=record.mode;
+          if(record.format==='mixed'&&record.maxPlayers>2){
+            record.gamePool??=GROUP_ROTATION.slice();
+            record.roundLimit??=5;
+          }
+          ensureSeries(record);record.recentActions??=[];record.rematchVotes??=Array(record.players.length).fill(false);record.paused??=false;record.tvEnabled??=false;this.rooms.set(record.code,record);}
       }
     } catch(err) { if(err.code!=='ENOENT') throw err; }
   }
@@ -176,7 +147,7 @@ export class RoomStore {
   }
   async create(options) {
     if(!options||typeof options!=='object'||Array.isArray(options))throw Error('Invalid room settings.');
-    let {mode,name,avatar,format='single',maxPlayers=2,matchLength='full'}=options;
+    let {mode,name,avatar,format='single',maxPlayers=2,matchLength='full',gamePool=null,roundLimit=null}=options;
     return this._exclusive(async()=>{
     this.prune();
     if(this.rooms.size>=1000)throw Error('The room service is full. Try again later.');
@@ -185,21 +156,53 @@ export class RoomStore {
     if(!['phase-quest','contract-club','crown-circuit','shanghai-nights'].includes(mode))matchLength='full';
     format=tournamentFormat(format);
     if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>6)throw Error('Choose between 2 and 6 players.');
-    if(maxPlayers>2&&(!GROUP_MODES.has(mode)||format!=='single'))throw Error('Group tables support eight selected games in single-game mode; Games Night Mix is for two players.');
+    if(maxPlayers>2&&!GROUP_MODES.has(mode))
+      throw Error('Group tables support eight selected games; choose a group-compatible game.');
+    if(gamePool!==null) {
+      if(format!=='mixed'||!Array.isArray(gamePool)||gamePool.length<1||gamePool.length>10||
+        new Set(gamePool).size!==gamePool.length||gamePool.some(id=>!MODES.has(id)))
+        throw Error('Choose a valid Games Night Mix game pool.');
+    }
+    if(format==='mixed') {
+      gamePool??=(maxPlayers>2?GROUP_ROTATION:TOUR_ROTATION).slice();
+      if(maxPlayers>2&&gamePool.some(id=>!GROUP_MODES.has(id)))
+        throw Error('Group Games Night Mix supports only six-player-compatible games.');
+      if(!gamePool.includes(mode))throw Error('First game must be in the selected Games Night Mix pool.');
+      if(roundLimit!==null&&(!Number.isInteger(roundLimit)||roundLimit<3||roundLimit>12))
+        throw Error('Choose 3–12 tournament rounds.');
+      if(maxPlayers>2)roundLimit??=5;
+    } else if(gamePool!==null||roundLimit!==null)throw Error('Custom rounds are only available for Games Night Mix.');
     const player={name:safeName(name),avatar:safeAvatar(avatar)};
     const credential=token();player.tokenHash=hash(credential);
     let code=roomCode();while(this.rooms.has(code))code=roomCode();
-    const room={code,mode,startMode:mode,format,maxPlayers,matchLength,paused:false,tvEnabled:false,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
+    const room={code,mode,startMode:mode,format,maxPlayers,matchLength,gamePool,roundLimit,paused:false,tvEnabled:false,players:[player],status:'waiting',game:null,revision:1,created:this.now(),updated:this.now(),rematchVotes:Array(maxPlayers).fill(false),recentActions:[],gameNumber:1,series:createSeries(1,maxPlayers)};
     this.rooms.set(code,room);await this.save();return {code,token:credential,seat:0,view:this.view(code,credential)};
     });
   }
   createGame(mode,seed,playerCount=2,matchLength='full') {
-    if(mode==='tile-royale')return createTileGame({mode,seed,playerCount});
-    if(mode==='low-glow')return createLowGame({mode,seed});
-    if(mode==='eight-shift')return createEightGame({mode,seed,playerCount});
-    if(mode==='stack-run'||mode==='malice-duel')return createSequenceGame({mode,seed,playerCount});
-    if(mode==='number-ladder')return createRackGame({mode,seed});
-    return createContractGame({mode,seed,playerCount,matchLength});
+    return getGameModule(mode).create({mode,seed,playerCount,matchLength});
+  }
+  /** Run server-controlled AI seats without revealing the room state to a browser bot.
+   * The bot engines inspect the current seat and public table only. Each server
+   * reshuffle callback uses cryptographic randomness, and the loop is bounded. */
+  _advanceBots(room) {
+    if(room.status!=='playing'||!room.game)return;
+    for(let step=0;step<room.players.length*4;step++) {
+      const state=room.game;
+      if(state.winner!==null||state.roundWinner!==undefined&&state.roundWinner!==null)break;
+      const seat=state.active,player=room.players[seat];
+      if(!player?.bot)break;
+      const persona=botPersona(player.avatar);
+      const selected=player.botLevel??'standard';
+      const difficulty=selected==='standard'?(persona.style==='planner'?'expert':
+        persona.style==='reckless'?'easy':'standard'):selected;
+      const next=getGameModule(room.mode).botMove(state,difficulty,seat,cryptoShuffle);
+      if(JSON.stringify(next)===JSON.stringify(state))break;
+      room.game=next;
+      if(step%3===0)next.log.unshift(`${player.name}: “${persona.taunts[(next.turn??next.round??1)%persona.taunts.length]}”`);
+      if(next.log.length>70)next.log.length=70;
+      recordMatchResult(room);
+    }
   }
   // Called only while a room is waiting. Host can launch a group early once 3 seats are filled.
   _beginRoom(room) {
@@ -209,6 +212,11 @@ export class RoomStore {
     room.game.log=[`Private table ready: ${room.players.map(p=>p.name).join(', ')}.`];
     room.status='playing';room.paused=false;room.rematchVotes=Array(room.players.length).fill(false);
     room.series=createSeries(1,room.players.length);
+    if(room.format==='mixed'&&Number.isInteger(room.roundLimit)) {
+      room.series.roundLimit=room.roundLimit;
+      room.series.points=Array(room.players.length).fill(0);
+    }
+    this._advanceBots(room);
   }
   async join(code,details) {
     if(!details||typeof details!=='object'||Array.isArray(details))throw Error('Enter a player name and avatar.');
@@ -238,7 +246,7 @@ export class RoomStore {
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
     return {code:room.code,mode:room.mode,matchLength:room.matchLength??'full',status:room.status,paused:Boolean(room.paused),tvEnabled:Boolean(room.tvEnabled),revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
-      players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,connected:[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
+      players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,bot:Boolean(p.bot),connected:Boolean(p.bot)||[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
       storage:this.storageKind};
   }
   /** A completely separate, allowlisted projection for TV. Never reuse projectGame here:
@@ -250,7 +258,8 @@ export class RoomStore {
     const game=room.game;
     const playerPublic=(p,i)=>({
       seat:i,name:room.players[i].name,avatar:room.players[i].avatar,
-      connected:[...(this.listeners.get(code)??[])].some(entry=>entry.seat===i),
+      connected:Boolean(room.players[i]?.bot)||[...(this.listeners.get(code)??[])].some(entry=>entry.seat===i),
+      bot:Boolean(room.players[i]?.bot),
       handCount:Array.isArray(p.hand)?p.hand.length:null,
       rackCount:Array.isArray(p.rack)?p.rack.length:null,
       stockCount:Array.isArray(p.stock)?p.stock.length:null,
@@ -265,16 +274,7 @@ export class RoomStore {
       code:room.code,mode:room.mode,status:room.status,paused:Boolean(room.paused),
       revision:room.revision,maxPlayers:room.maxPlayers,series:publicSeries(room),
       players:game?game.players.map(playerPublic):room.players.map((p,i)=>({seat:i,name:p.name,avatar:p.avatar,connected:false})),
-      board:game?{
-        kind:game.kind,active:game.active,winner:game.winner,roundWinner:game.roundWinner??null,
-        round:game.round??null,turn:game.turn??null,step:game.step??null,
-        activeSuit:game.activeSuit??null,drawCount:game.draw?.length??0,
-        discardTop:game.discard?.at(-1)??null,
-        builds:game.kind==='sequence'?game.builds:null,
-        groups:game.kind==='tiles'?game.groups:null,
-        melds:game.kind==='contract'&&game.mode==='contract-club'?(game.melds??[]):null,
-        finalRackPoints:game.winner!==null&&game.kind==='tiles'?(game.finalRackPoints??null):null
-      }:null
+      board:game?getGameModule(room.mode).viewForTV(game):null
     };
   }
   async hostAction(code,credential,action) {
@@ -282,10 +282,26 @@ export class RoomStore {
       const {room,seat}=this._auth(code,credential);
       if(seat!==0)throw Error('Only the host can manage this table.');
       if(!action||typeof action!=='object'||Array.isArray(action))throw Error('Invalid host action.');
-      if(!['pause','resume','tv-create','tv-disable'].includes(action.type))throw Error('Unknown host action.');
+      if(!['pause','resume','tv-create','tv-disable','bot-fill','bot-remove'].includes(action.type))throw Error('Unknown host action.');
       if(action.revision!==room.revision)throw Error('The table changed before your action. Please try again.');
       let watchKey=null;
-      if(action.type==='pause'||action.type==='resume') {
+      if(action.type==='bot-fill'||action.type==='bot-remove') {
+        if(room.status!=='waiting')throw Error('Add or remove bot seats before starting the table.');
+        if(action.type==='bot-fill') {
+          const level=action.level??'standard';
+          if(!['easy','standard','expert'].includes(level))throw Error('Choose a valid bot difficulty.');
+          while(room.players.length<room.maxPlayers){
+            const used=new Set(room.players.map(p=>p.avatar));
+            const avatar=Array.from({length:16},(_,i)=>i+1).find(id=>!used.has(id))??14;
+            const persona=botPersona(avatar);
+            room.players.push({name:persona.name,avatar,bot:true,botLevel:level,tokenHash:null});
+          }
+          this._beginRoom(room);
+        } else {
+          if(room.players.length<=1||!room.players.at(-1).bot)throw Error('The last seat is not a removable bot.');
+          room.players.pop();
+        }
+      } else if(action.type==='pause'||action.type==='resume') {
         if(room.status!=='playing'||!room.game||room.game.winner!==null)throw Error('Only an active table can be paused or resumed.');
         const paused=action.type==='pause';
         if(room.paused===paused)throw Error(paused?'Table is already paused.':'Table is not paused.');
@@ -339,6 +355,7 @@ export class RoomStore {
         room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE(),room.players.length,room.format==='mixed'?'full':room.matchLength));
         room.game.players.forEach((p,i)=>p.name=room.players[i].name);
         room.game.log=[`Rematch started: ${room.players.map(p=>p.name).join(', ')}.`];
+        this._advanceBots(room);
         room.rematchVotes=Array(room.players.length).fill(false);
       }
       acknowledge();room.revision++;room.updated=this.now();await this.save();this.notify(code);
@@ -351,88 +368,11 @@ export class RoomStore {
         if(!['contract','low'].includes(game.kind)||game.roundWinner===null||game.winner!==null)throw Error('The next round is not yet available.');
         // Either player may continue a completed round.
       } else if(game.active!==seat&&kind!=='contract-buy')throw Error('It is your opponent’s turn.');
-      let outcome;
-      switch(kind) {
-        case 'tile-lay':
-          if(game.kind!=='tiles'||!Array.isArray(action.indices)||action.indices.length>13||!action.indices.every(x=>restrictedIndex(x,99))||(action.target!==null&&action.target!==undefined&&!restrictedIndex(action.target,999)))throw Error('Invalid tile selection.');
-          outcome=tileLay(game,action.indices,action.target??null);break;
-        case 'tile-end':
-          if(game.kind!=='tiles'||typeof action.draw!=='boolean')throw Error('Invalid tile turn action.');
-          outcome=tileEndTurn(game,action.draw);break;
-        case 'low-draw':
-          if(game.kind!=='low'||!['deck','discard'].includes(action.from))throw Error('Invalid low-card draw.');
-          if(action.from==='deck'&&game.draw.length===0&&game.discard.length>1){const shuffled=structuredClone(game),top=shuffled.discard.pop();shuffled.draw=cryptoShuffle(shuffled.discard);shuffled.discard=[top];outcome=lowDraw(shuffled,'deck');}else outcome=lowDraw(game,action.from);break;
-        case 'low-replace':
-          if(game.kind!=='low'||!restrictedIndex(action.index,11))throw Error('Invalid grid position.');
-          outcome=lowReplace(game,action.index);break;
-        case 'low-flip':
-          if(game.kind!=='low'||!restrictedIndex(action.index,11))throw Error('Invalid grid position.');
-          outcome=lowFlip(game,action.index);break;
-        case 'eight-play':
-          if(game.kind!=='eights'||!restrictedIndex(action.index,60)||(action.suit!==null&&action.suit!==undefined&&!['hearts','diamonds','clubs','spades'].includes(action.suit)))throw Error('Invalid eight-card play.');
-          outcome=eightPlay(game,action.index,action.suit??null);break;
-        case 'eight-draw':
-          if(game.kind!=='eights')throw Error('Invalid game action.');
-          if(!game.draw.length&&game.discard.length>1){const shuffled=structuredClone(game),top=shuffled.discard.pop();shuffled.draw=cryptoShuffle(shuffled.discard);shuffled.discard=[top];outcome=eightDraw(shuffled);}else outcome=eightDraw(game);break;
-        case 'eight-pass':
-          if(game.kind!=='eights')throw Error('Invalid game action.');outcome=eightPass(game);break;
-        case 'sequence-play':
-          if(game.kind!=='sequence'||!['stock','hand','discard'].includes(action.sourceType)||!restrictedIndex(action.sourceIndex,100)||!restrictedIndex(action.pileIndex,3))throw Error('Invalid card action.');
-          outcome=playSequenceCard(game,action.sourceType,action.sourceIndex,action.pileIndex);break;
-        case 'sequence-refill':
-          if(game.kind!=='sequence')throw Error('Invalid sequence turn action.');
-          outcome=replenishSequenceHand(game);break;
-        case 'sequence-pass':
-          if(game.kind!=='sequence')throw Error('Invalid sequence turn action.');
-          outcome=passSequenceTurn(game);break;
-        case 'sequence-discard':
-          if(game.kind!=='sequence'||!restrictedIndex(action.handIndex,100)||!restrictedIndex(action.discardIndex,3))throw Error('Invalid discard action.');
-          outcome=discardSequenceCard(game,action.handIndex,action.discardIndex);break;
-        case 'rack-draw':
-          if(game.kind!=='rack'||!['deck','discard'].includes(action.from))throw Error('Invalid rack draw.');
-          if(action.from==='deck'&&game.draw.length===0&&game.discard.length>1) {
-            const shuffled=structuredClone(game);
-            const top=shuffled.discard.pop();
-            shuffled.draw=cryptoShuffle(shuffled.discard);
-            shuffled.discard=[top];
-            outcome=rackDraw(shuffled,action.from);
-          } else outcome=rackDraw(game,action.from);
-          break;
-        case 'rack-replace':
-          if(game.kind!=='rack'||!restrictedIndex(action.index,9))throw Error('Invalid rack position.');
-          outcome=rackReplace(game,action.index);break;
-        case 'rack-discard':
-          if(game.kind!=='rack')throw Error('Invalid rack discard.');
-          outcome=rackDiscard(game);break;
-        case 'contract-draw':
-          if(game.kind!=='contract'||!['deck','discard'].includes(action.from))throw Error('Invalid draw action.');
-          if(action.from==='deck'&&game.draw.length===0&&game.discard.length>1) {
-            const shuffled=structuredClone(game);
-            const top=shuffled.discard.pop();
-            shuffled.draw=cryptoShuffle(shuffled.discard);
-            shuffled.discard=[top];
-            outcome=drawContractCard(shuffled,action.from);
-          } else outcome=drawContractCard(game,action.from);
-          break;
-        case 'contract-buy':
-          if(game.kind!=='contract')throw Error('Invalid Shanghai buying action.');
-          outcome=buyShanghaiDiscard(game,seat);break;
-        case 'contract-discard':
-          if(game.kind!=='contract'||!restrictedIndex(action.handIndex,100))throw Error('Invalid discard action.');
-          outcome=discardContractCard(game,action.handIndex);break;
-        case 'contract-lay':
-          if(game.kind!=='contract')throw Error('Invalid contract action.');
-          outcome=layContract(game);break;
-        case 'contract-layoff':
-          if(game.kind!=='contract'||!restrictedIndex(action.handIndex,100)||!restrictedIndex(action.meldIndex,99))throw Error('Invalid meld extension.');
-          outcome=layOffContract(game,action.handIndex,action.meldIndex);break;
-        case 'next-round':outcome=game.kind==='low'?lowNextRound(game):nextContractRound(game);
-          if(outcome.state)outcome.state=securelyDeal(outcome.state);break;
-        default:throw Error('Unknown game action.');
-      }
+      const outcome=applyGameAction(game,action,{seat,reshuffle:cryptoShuffle,secureDeal:securelyDeal});
       if(outcome?.error)throw Error(outcome.error);
       room.game=outcome.state;
       recordMatchResult(room);
+      this._advanceBots(room);
     }
     acknowledge();room.revision++;room.updated=this.now();
     await this.save();this.notify(code);

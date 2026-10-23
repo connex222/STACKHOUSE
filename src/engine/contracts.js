@@ -129,14 +129,14 @@ function dealRound(state) {
 export function currentMission(state,playerIndex=state.active) {
   return MISSION_SETS[state.mode][state.players[playerIndex].mission] ?? null;
 }
-export function drawContractCard(input,from='deck') {
+export function drawContractCard(input,from='deck',reshuffle=null) {
   const state=clone(input);
   if(state.winner!==null || state.roundWinner!==null) return {error:'Finish this round first.'};
   if(state.step!=='draw') return {error:'Discard or lay your contract before drawing again.'};
   if(!['deck','discard'].includes(from)) return {error:'Unknown draw source.'};
   if(from==='deck' && !state.draw.length && state.discard.length>1) {
     const top=state.discard.pop();
-    state.draw=shuffle(state.discard,mulberry32(state.seed^state.round^state.players.reduce((sum,p)=>sum+p.score,0)));
+    state.draw=reshuffle?reshuffle(state.discard):shuffle(state.discard,mulberry32(state.seed^state.round^state.players.reduce((sum,p)=>sum+p.score,0)));
     state.discard=[top];
   }
   const picked=from==='deck' ? state.draw.pop() : state.discard.pop();
@@ -333,37 +333,37 @@ export function chooseContractBotDraw(hand,top,mission,level='standard'){
  const improved=contractHandPotential([...hand,top],mission)-value;
  return improved>=(level==='expert'?3:9)?'discard':'deck';
 }
-export function runContractBot(input,level='standard') {
+export function runContractBot(input,level='standard',seat=1,reshuffle=null) {
  let state=clone(input);
  if(!['easy','standard','expert'].includes(level))level='standard';
  // A buying opportunity belongs to the waiting bot and does not advance a turn.
- if(state.mode==='shanghai-nights'&&state.active===0&&state.buyWindow&&state.roundWinner===null&&state.winner===null){
-  const top=state.discard.at(-1),hand=state.players[1].hand;
-  const mission=currentMission(state,1);
+ if(state.mode==='shanghai-nights'&&state.active!==seat&&state.buyWindow&&state.roundWinner===null&&state.winner===null){
+  const top=state.discard.at(-1),hand=state.players[seat].hand;
+  const mission=currentMission(state,seat);
   const gain=top?contractHandPotential([...hand,top],mission)-contractHandPotential(hand,mission):0;
   const naturallyRelated=top&&!top.wild&&hand.some(c=>!c.wild&&(c.value===top.value||(c.colour===top.colour&&Math.abs(c.value-top.value)<=2)));
   const attractive=top&&(findContract([...hand,top],mission)||(level==='expert'?gain>=13:level==='standard'?gain>=24||naturallyRelated:false));
-  if(attractive&&!state.buyUsed?.[1])return buyShanghaiDiscard(state,1).state??state;
+  if(attractive&&!state.buyUsed?.[seat])return buyShanghaiDiscard(state,seat).state??state;
  }
- if(state.active!==1 || state.roundWinner!==null || state.winner!==null)return state;
- const player=state.players[1],mission=currentMission(state,1),top=state.discard.at(-1);
+ if(state.active!==seat || state.roundWinner!==null || state.winner!==null)return state;
+ const player=state.players[seat],mission=currentMission(state,seat),top=state.discard.at(-1);
  const source=player.laidDown&&state.mode==='contract-club'?'deck':chooseContractBotDraw(player.hand,top,mission,level);
- let result=drawContractCard(state,source);
- if(result.error && source==='deck')result=drawContractCard(state,'discard');
+ let result=drawContractCard(state,source,reshuffle);
+ if(result.error && source==='deck')result=drawContractCard(state,'discard',reshuffle);
  if(result.error)return state;
  state=result.state;
- if(!state.players[1].laidDown){
+ if(!state.players[seat].laidDown){
   result=layContract(state);
   if(!result.error){
    state=result.state;
    if(state.mode!=='contract-club'||state.roundWinner!==null)return state;
   }
  }
- if(state.mode==='contract-club'&&state.players[1].laidDown){
-  for(let limit=0;limit<20&&state.players[1].hand.length&&state.roundWinner===null;limit++){
+ if(state.mode==='contract-club'&&state.players[seat].laidDown){
+  for(let limit=0;limit<20&&state.players[seat].hand.length&&state.roundWinner===null;limit++){
    let moved=false;
-   for(let i=0;i<state.players[1].hand.length&&!moved;i++)for(let m=0;m<state.melds.length&&!moved;m++){
-    if(canLayOffContract(state.players[1].hand[i],state.melds[m])){
+   for(let i=0;i<state.players[seat].hand.length&&!moved;i++)for(let m=0;m<state.melds.length&&!moved;m++){
+    if(canLayOffContract(state.players[seat].hand[i],state.melds[m])){
      const step=layOffContract(state,i,m);if(!step.error){state=step.state;moved=true;}
     }
    }
@@ -371,7 +371,7 @@ export function runContractBot(input,level='standard') {
   }
   if(state.roundWinner!==null)return state;
  }
- const hand=state.players[1].hand;
- const index=chooseContractBotDiscard(hand,state.players[1].laidDown?null:mission,state.mode,level);
+ const hand=state.players[seat].hand;
+ const index=chooseContractBotDiscard(hand,state.players[seat].laidDown?null:mission,state.mode,level);
  return index<0?state:(discardContractCard(state,index).state??state);
 }

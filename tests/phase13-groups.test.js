@@ -107,7 +107,10 @@ test('group capacity and tournament constraints cannot be bypassed by HTTP paylo
  for(const mode of ['low-glow','number-ladder']){
   await assert.rejects(store.create({...player(0),mode,maxPlayers:3}),/Group tables support/);
  }
- await assert.rejects(store.create({...player(0),mode:'eight-shift',maxPlayers:3,format:'mixed'}),/Group tables support/);
+ const mix=await store.create({...player(0),mode:'eight-shift',maxPlayers:3,format:'mixed'});
+ assert.equal(mix.view.maxPlayers,3);
+ assert.equal(mix.view.series.format,'mixed');
+ await assert.rejects(store.create({...player(0),mode:'eight-shift',maxPlayers:3,format:'mixed',gamePool:['low-glow']}),/group|compatible/i);
 });
 
 test('3-player rooms recover all private seats and ongoing series from durable snapshots',async()=>{

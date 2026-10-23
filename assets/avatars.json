@@ -2,81 +2,177 @@
   {
     "id": 1,
     "name": "The Host",
-    "image": "/assets/avatar-01.webp"
+    "image": "/assets/avatar-01.webp",
+    "playStyle": "calm",
+    "taunts": [
+      "A warm welcome to this table.",
+      "That was a thoughtful play.",
+      "There is always another hand."
+    ]
   },
   {
     "id": 2,
     "name": "The Strategist",
-    "image": "/assets/avatar-02.webp"
+    "image": "/assets/avatar-02.webp",
+    "playStyle": "planner",
+    "taunts": [
+      "I have a plan for this.",
+      "Let us see what the next card brings.",
+      "Interesting move."
+    ]
   },
   {
     "id": 3,
     "name": "The Sunshine",
-    "image": "/assets/avatar-03.webp"
+    "image": "/assets/avatar-03.webp",
+    "playStyle": "cheerful",
+    "taunts": [
+      "Good luck, everyone!",
+      "That is a lovely draw.",
+      "I am having a grand time."
+    ]
   },
   {
     "id": 4,
     "name": "The Gentleman",
-    "image": "/assets/avatar-04.webp"
+    "image": "/assets/avatar-04.webp",
+    "playStyle": "cautious",
+    "taunts": [
+      "No rush, good moves take time.",
+      "A neat little turn.",
+      "Well played indeed."
+    ]
   },
   {
     "id": 5,
     "name": "The Rebel",
-    "image": "/assets/avatar-05.webp"
+    "image": "/assets/avatar-05.webp",
+    "playStyle": "reckless",
+    "taunts": [
+      "I am going for it!",
+      "Fortune favours the bold.",
+      "That was worth the risk."
+    ]
   },
   {
     "id": 6,
     "name": "The Captain",
-    "image": "/assets/avatar-06.webp"
+    "image": "/assets/avatar-06.webp",
+    "playStyle": "planner",
+    "taunts": [
+      "Steady as she goes.",
+      "Keeping the crew on course.",
+      "A tidy manoeuvre."
+    ]
   },
   {
     "id": 7,
     "name": "The Star",
-    "image": "/assets/avatar-07.webp"
+    "image": "/assets/avatar-07.webp",
+    "playStyle": "cheerful",
+    "taunts": [
+      "My lucky turn perhaps?",
+      "A little sparkle for the table!",
+      "What a wonderful game."
+    ]
   },
   {
     "id": 8,
     "name": "The Professor",
-    "image": "/assets/avatar-08.webp"
+    "image": "/assets/avatar-08.webp",
+    "playStyle": "planner",
+    "taunts": [
+      "Fascinating probability.",
+      "Let us test that theory.",
+      "This result bears watching."
+    ]
   },
   {
     "id": 9,
     "name": "The Drifter",
-    "image": "/assets/avatar-09.webp"
+    "image": "/assets/avatar-09.webp",
+    "playStyle": "cautious",
+    "taunts": [
+      "I will take the quiet path.",
+      "Slow and steady this time.",
+      "The next hand will tell."
+    ]
   },
   {
     "id": 10,
     "name": "The Ace",
-    "image": "/assets/avatar-10.webp"
+    "image": "/assets/avatar-10.webp",
+    "playStyle": "bold",
+    "taunts": [
+      "I fancy my chances.",
+      "That card looks promising.",
+      "What a close one!"
+    ]
   },
   {
     "id": 11,
     "name": "The Maverick",
-    "image": "/assets/avatar-11.webp"
+    "image": "/assets/avatar-11.webp",
+    "playStyle": "reckless",
+    "taunts": [
+      "I like the unexpected.",
+      "Let us shake up the table.",
+      "That was a bold experiment."
+    ]
   },
   {
     "id": 12,
     "name": "The Gamer",
-    "image": "/assets/avatar-12.webp"
+    "image": "/assets/avatar-12.webp",
+    "playStyle": "planner",
+    "taunts": [
+      "Calculated!",
+      "I had my eye on that.",
+      "Good game, keep it going."
+    ]
   },
   {
     "id": 13,
     "name": "The Duchess",
-    "image": "/assets/avatar-13.webp"
+    "image": "/assets/avatar-13.webp",
+    "playStyle": "cautious",
+    "taunts": [
+      "A graceful little move.",
+      "Patience is an advantage.",
+      "There is elegance in restraint."
+    ]
   },
   {
     "id": 14,
     "name": "The Joker",
-    "image": "/assets/avatar-14.webp"
+    "image": "/assets/avatar-14.webp",
+    "playStyle": "wild-hoarder",
+    "taunts": [
+      "A surprise in my sleeve.",
+      "You never know what comes next.",
+      "I had to play that one!"
+    ]
   },
   {
     "id": 15,
     "name": "The Ranger",
-    "image": "/assets/avatar-15.webp"
+    "image": "/assets/avatar-15.webp",
+    "playStyle": "cautious",
+    "taunts": [
+      "I am watching the table.",
+      "Stay sharp out there.",
+      "A clean move is best."
+    ]
   },
   {
     "id": 16,
     "name": "The Trendsetter",
-    "image": "/assets/avatar-16.webp"
+    "image": "/assets/avatar-16.webp",
+    "playStyle": "bold",
+    "taunts": [
+      "Let us make this interesting.",
+      "That is how I play it.",
+      "Your turn to shine."
+    ]
   }
 ]

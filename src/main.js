@@ -1,4 +1,5 @@
 import {createGameAudio} from './audio.js';
+import {botPersona} from './bot-personalities.js';
 import {classifyRoomRecovery} from './room-recovery.js';
 import { sessionSeed } from './rng.js';
 import {handTokens,reconcileHandOrder,moveHandToken,sortHandOrder} from './hand-order.js';
@@ -29,12 +30,41 @@ const games = [
  {id:'low-glow',title:'Low Glow',category:'Memory / low-score cards',kicker:'THE LOWEST SCORE WINS.',description:'Flip, swap and clear matching columns across four fast rounds.',players:'2 players + bot demo',icon:'⬡',art:'low',kind:'low',tag:'Skyjo-style house game'},
  {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2–6 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
 ];
+/** Six launcher families retain the ten existing engine-mode IDs. This is deliberate:
+ * saved local games, links, private room snapshots and the full rule sets stay valid. */
+const gameFamilies = [
+ {id:'stack-run',variants:['stack-run','malice-duel'],title:'Stack Run',description:'Choose Classic or Malice sequencing.'},
+ {id:'phase-quest',variants:['phase-quest','contract-club','shanghai-nights','crown-circuit'],title:'Contract',description:'Four distinctive contract rule sets.'},
+ {id:'number-ladder',variants:['number-ladder'],title:'Number Ladder'},
+ {id:'tile-royale',variants:['tile-royale'],title:'Tile Royale'},
+ {id:'low-glow',variants:['low-glow'],title:'Low Glow'},
+ {id:'eight-shift',variants:['eight-shift'],title:'Eight Shift'}
+];
+function chosenFamilyMode(family, root=document) {
+ const descriptor=gameFamilies.find(item=>item.id===family);
+ const chosen=root.getElementById(`family-${family}`)?.value;
+ return descriptor?.variants.includes(chosen)?chosen:descriptor?.variants[0]??family;
+}
+function familyTile(family, index, soloRecords) {
+ const g=games.find(item=>item.id===family.id),count=family.variants.length;
+ const variantSelector=count>1?`<label class="family-selector-label" for="family-${family.id}">RULE SET</label>
+ <select class="family-variant" id="family-${family.id}" aria-label="${family.title} rule set">${family.variants.map(mode=>{
+ const option=games.find(item=>item.id===mode);
+ return `<option value="${mode}">${option.title==='Stack Run'?'Classic':option.title==='Malice Duel'?'Malice':option.title}</option>`;
+ }).join('')}</select>`:'';
+ return `<article class="game-tile family-tile art-${g.art}"><div class="tile-art"><span class="art-icon" aria-hidden="true">${g.icon}</span><span class="art-sequence" aria-hidden="true">${count>1?`${count} RULE SETS`:g.kicker}</span></div>
+ <div class="tile-body"><span class="tile-type">${escapeHtml(g.category)}</span><h3>${family.title}</h3><p>${family.description??g.description}</p>${variantSelector}
+ <div class="tile-tags"><span>${count>1?`${count} complete rule sets`:g.tag}</span></div>
+ <div class="tile-buttons"><button class="tile-play" data-action="start" data-family="${family.id}">Play the bot ${icon('arrow')}</button>
+ <button class="tile-play tile-online" data-action="room-open" data-family="${family.id}">Private table ${icon('people',16)}</button>
+ <button class="tile-rules" data-action="rules" data-family="${family.id}" aria-label="How to play ${family.title}">${icon('info',15)} How to play</button></div></div></article>`;
+}
 const savedAvatar=Number(localStorage.getItem('stackhouse.avatar')||'1');
 const allowedBotLevels=['easy','standard','expert'];
 const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
 const storedSoundVolume=Number(localStorage.getItem('stackhouse.soundVolume') ?? 85);
 const initialSoundVolume=Number.isFinite(storedSoundVolume)?Math.max(0,Math.min(100,storedSoundVolume)):85;
-const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,roomMatchLength:'full',soloContractLength:'full',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',roomRecovery:null,avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
+const ui={screen:'home',drawerOpen:false,soloBotCount:1,mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,roomMatchLength:'full',soloContractLength:'full',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',roomRecovery:null,avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
   soundOn:localStorage.getItem('stackhouse.sound')!=='false',soundVolume:initialSoundVolume,soundStatus:'Press Test to check audio.',soundTestPending:false,audioSettingsOpen:false,ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
@@ -52,7 +82,7 @@ function saveSolo(){
 }
 function resumeSolo(){
  const save=savedSolo();if(!save)return toast('No saved solo match was found.',true);
- stopOnline();ui.mode=save.mode;ui.game=save.game;ui.handOrders=save.handOrders;ui.matchId=save.matchId??null;
+ stopOnline();ui.mode=save.mode;ui.game=save.game;ui.soloBotCount=save.game.players.length-1;ui.handOrders=save.handOrders;ui.matchId=save.matchId??null;
  ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.selected=null;ui.modal=null;ui.moment=null;
  ui.screen='game';ui.lowAction='replace';sound('card');render();
  window.scrollTo({top:0,behavior:'instant'});
@@ -77,15 +107,17 @@ const opponentName=()=>opponentProfile()?.name||'House Bot';
 const opponentImage=()=>asset(opponentProfile()?.avatar||14).image;
 const roomOpponents=()=>ui.online?.view?.players?.filter((_,i)=>i!==ui.online.seat)??[];
 function opponentRail(){
- if(!isOnline()||roomOpponents().length<2)return '';
- const seats=ui.online.view.players;
- const localOrder=[ui.online.seat,...seats.map((_,i)=>i).filter(i=>i!==ui.online.seat)];
+ if(!ui.game||(isOnline()?roomOpponents().length<2:ui.game.players.length<3))return '';
+ const seats=isOnline()?ui.online.view.players:ui.game.players.map((player,i)=>({
+  name:player.name,avatar:i===0?ui.avatarId:player.avatarId??(i+1),bot:i>0,connected:true
+ }));
+ const localOrder=isOnline()?[ui.online.seat,...seats.map((_,i)=>i).filter(i=>i!==ui.online.seat)]:seats.map((_,i)=>i);
  const current=ui.game?.active,finished=ui.game?.winner!==null,roundEnd=ui.game?.roundWinner!==null&&ui.game?.roundWinner!==undefined;
  return `<section class="group-opponents" aria-label="Players at the table">${localOrder.map((physical,relative)=>{
   const p=seats[physical],progress=ui.game?.players[relative];
   const isTurn=!finished&&!roundEnd&&current===relative;
   const score=progress?.mission!==undefined?`Contract ${progress.mission+1} · ${progress.score} pts`:progress?.hand?`${progress.hand.length} cards`:progress?.rack?`${progress.rack.length} tiles`:progress?.stock?`${progress.stock.length} in stockpile`:'';
-  return `<div class="group-opponent ${isTurn?'seat-on-turn':''} ${relative===0?'seat-yourself':''}"><img src="${asset(p.avatar).image}" alt=""><div class="seat-info"><strong>${escapeHtml(p.name)}${relative===0?' (you)':''}</strong><small>${p.connected?'● Connected':'○ Reconnecting'}${score?` · ${escapeHtml(score)}`:''}</small></div>${isTurn?'<span class="seat-turn" aria-label="Current turn">TURN</span>':''}</div>`;
+  return `<div class="group-opponent ${isTurn?'seat-on-turn':''} ${relative===0?'seat-yourself':''}"><img src="${asset(p.avatar).image}" alt=""><div class="seat-info"><strong>${escapeHtml(p.name)}${relative===0?' (you)':''}</strong><small>${p.bot?'● House Bot':p.connected?'● Connected':'○ Reconnecting'}${score?` · ${escapeHtml(score)}`:''}</small></div>${isTurn?'<span class="seat-turn" aria-label="Current turn">TURN</span>':''}</div>`;
  }).join('')}</section>`;
 }
 const asset=id=>avatars.find(a=>a.id===id)||avatars[0];
@@ -207,10 +239,11 @@ function header() {
   return `<header class="site-header"><button class="brand" data-action="home" aria-label="Stackhouse Social home">
     <img src="/assets/logo.webp" alt="" width="54" height="54"><span class="brand-word">STACKHOUSE <small>SOCIAL</small></span></button>
     <nav class="top-actions" aria-label="Main navigation"><span class="online-mark"><span></span> ${isOnline()?'Live private match':'Ten tables · Games Night Mix'}</span>
-      <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
-      <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
       <details class="audio-settings" id="audio-settings" ${ui.audioSettingsOpen?'open':''}><summary aria-label="Audio settings">${icon('sound',18)} <span>Audio settings</span></summary>
         <div class="audio-settings-panel" aria-label="Audio controls">
+          <div class="audio-settings-toggles">      <button data-action="toggle-ambience" class="icon-button ${ui.ambienceOn?'ambience-on':''}" aria-pressed="${ui.ambienceOn}" aria-label="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience" title="${ui.ambienceOn?'Turn off':'Turn on'} lounge ambience">♫</button>
+      <button data-action="toggle-sound" class="icon-button sound-toggle ${ui.soundOn?'sound-on':'sound-off'}" aria-pressed="${ui.soundOn}" aria-label="${ui.soundOn?'Turn off':'Turn on'} game sounds" title="${ui.soundOn?'Turn off':'Turn on'} game sounds">${icon(ui.soundOn?'sound':'mute',20)}<span class="sound-label">Sound ${ui.soundOn?'on':'off'}</span></button>
+</div>
           <label class="sound-volume-control" for="sound-volume">Effects volume <input id="sound-volume" aria-label="Game sound volume" type="range" min="0" max="100" step="5" value="${ui.soundVolume}"></label>
           <div class="audio-settings-tests"><button data-action="test-sound" class="sound-test-btn" aria-label="Play test sound" title="Play a recorded sample">${icon('play',14)} Test recording</button>
           <button data-action="test-tone" class="sound-test-btn sound-tone-btn" aria-label="Play diagnostic tone" title="Check your device with a generated test tone">Test speaker</button></div>
@@ -226,17 +259,18 @@ function homeScreen() {
  return `<main id="main-content" tabindex="-1" class="home-page"><section class="hero" aria-label="Welcome to Stackhouse Social">
    <div class="hero-content"><div class="eyebrow"><span class="diamond">◆</span> WELCOME TO THE HOUSE</div>
      <h1>Good cards.<br><em>Great company.</em></h1>
-     <p>Ten classic-inspired card battles, one spectacular place to play. Invite up to five friends to eight group tables, or challenge the House Bot.</p>
+     <p>Six game families with ten original rule sets, one spectacular place to play. Invite up to five friends to eight group tables, or challenge the House Bot.</p>
      <div class="hero-buttons"><button class="btn btn-primary" data-action="scroll-games">Choose your game ${icon('arrow')}</button>
        <button class="btn btn-ghost" data-action="room-open">Play with friends</button>${resume?`<button class="btn btn-outline" data-action="solo-resume">Continue ${escapeHtml(games.find(g=>g.id===resume.mode)?.title||'solo match')}</button>`:''}</div>
-     <div class="hero-highlights"><div><b>10</b><small>PLAYABLE TABLES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>${soloSummary.wins}</b><small>SOLO WINS ON THIS DEVICE</small></div></div>
+     <div class="hero-highlights"><div><b>6</b><small>GAME FAMILIES</small></div><div><b>16</b><small>CHARACTERS</small></div><div><b>${soloSummary.wins}</b><small>SOLO WINS ON THIS DEVICE</small></div></div>
    </div>
  </section>
  <section class="bot-level-section" aria-label="Bot challenge options"><label for="bot-level">House Bot challenge</label><select class="room-input bot-level-select" id="bot-level"><option value="easy" ${ui.botDifficulty==='easy'?'selected':''}>Easy</option><option value="standard" ${ui.botDifficulty==='standard'?'selected':''}>Standard</option><option value="expert" ${ui.botDifficulty==='expert'?'selected':''}>Expert</option></select><p>Easy, Standard and Expert are available in all ten solo games. Expert contract bots prioritise completing missions and avoiding costly discards.</p></section>
- <section class="bot-level-section" aria-label="Contract match pace"><label for="solo-contract-length">Contract game match length</label><select class="room-input bot-level-select" id="solo-contract-length"><option value="full">Full journey · all contracts</option><option value="quick">Quick Match · 2 deals per player</option></select><p>Quick Match ranks players by contracts completed, then fewest penalty points. Applies to the four contract games only.</p></section><section id="games" class="game-collection"><div class="section-heading"><div><div class="eyebrow">THE GAME COLLECTION</div><h2>Pick your next obsession.</h2><p>Easy to learn. Hard to put down. Each table has its own rules.</p></div><span class="section-pill">WAVES 1–3 · TEN GAMES</span></div>
- <div class="game-grid">${games.map((g,i)=>`<article class="game-tile art-${g.art}"><div class="tile-art"><span class="art-icon" aria-hidden="true">${g.icon}</span><span class="art-sequence" aria-hidden="true">${i===0?'1  2  3  4':i===1?'3 + 3 → 6':i===2?'♠ ♥ ♦ ♣':i===3?'7  8  9':i===4?'3 ★ 4 ★ 5':i===5?'10 → 40 → 60':i===6?'3 + 4 → 7':i===7?'4 4 4':i===8?'−2 0 3':'♥ 8 ♠'}</span></div>
- <div class="tile-body"><span class="tile-type">${escapeHtml(g.category)}</span><h3>${g.title}</h3><p>${g.description}</p><div class="tile-tags"><span>${g.tag}</span>${soloRecords.games[g.id]?.wins?`<span class="tile-trophy">★ ${soloRecords.games[g.id].wins} solo ${soloRecords.games[g.id].wins===1?'win':'wins'}</span>`:''}</div>
- <div class="tile-buttons"><button class="tile-play" data-action="start" data-mode="${g.id}">Play the bot <span>${icon('arrow')}</span></button><button class="tile-play tile-online" data-action="room-open" data-mode="${g.id}">Private table ${icon('people',16)}</button><button class="tile-rules" data-action="rules" data-mode="${g.id}" aria-label="How to play ${g.title}">${icon('info',15)} How to play</button></div></div></article>`).join('')}</div>
+ <section class="bot-level-section" aria-label="Solo opponent count"><label for="solo-bot-count">Solo opponents</label>
+ <select id="solo-bot-count" class="room-input bot-level-select">${[1,2,3,4,5].map(n=>`<option value="${n}" ${ui.soloBotCount===n?'selected':''}>${n} ${n===1?'House Bot':'House Bots'}</option>`).join('')}</select>
+ <p>For eight group-compatible games, choose one to five opponents. Number Ladder and Low Glow remain head-to-head.</p></section>
+ <section class="bot-level-section" aria-label="Contract match pace"><label for="solo-contract-length">Contract game match length</label><select class="room-input bot-level-select" id="solo-contract-length"><option value="full">Full journey · all contracts</option><option value="quick">Quick Match · 2 deals per player</option></select><p>Quick Match ranks players by contracts completed, then fewest penalty points. Applies to the four contract games only.</p></section><section id="games" class="game-collection"><div class="section-heading"><div><div class="eyebrow">THE GAME COLLECTION</div><h2>Pick your next obsession.</h2><p>Easy to learn. Hard to put down. Each table has its own rules.</p></div><span class="section-pill">SIX GAMES · TEN RULE SETS</span></div>
+ <div class="game-grid family-grid">${gameFamilies.map((family,i)=>familyTile(family,i,soloRecords)).join('')}</div>
  </section>
  <section class="house-banner"><div><span class="eyebrow">YOUR PEOPLE. YOUR TABLE.</span><h2>Sixteen personalities.<br>One winning look.</h2><p>Pick your player portrait before your first deal. Your choice carries across every table.</p><button class="btn btn-primary" data-action="avatars">Explore the avatars ${icon('arrow')}</button></div><div class="banner-avatars">${[0,4,6,10,12,13].map(n=>`<img src="${avatars[n].image}" alt="${avatars[n].name}" loading="eager">`).join('')}</div></section>
  </main>`;
@@ -262,17 +296,21 @@ function buildPile(state,index) {
 }
 function seqDiscardPile(pile,index,owner='human') {
   const card=pile.at(-1);
-  return `<button class="mini-pile ${owner==='human'&&ui.selected?.type==='hand'?'pile-available':''}" data-action="${owner==='human'?'seq-discard-dest':'no-op'}" data-index="${index}" aria-label="Discard pile ${index+1}">
+  const choosing=owner==='human'&&ui.selected?.type==='hand';
+  const action=owner!=='human'?'no-op':choosing?'seq-discard-dest':'seq-source';
+  return `<button class="mini-pile ${choosing?'pile-available':''}" data-action="${action}" data-type="discard" data-index="${index}" ${!card&&!choosing?'disabled':''} aria-pressed="${ui.selected?.type==='discard'&&ui.selected.index===index}" aria-label="Discard pile ${index+1}: ${choosing?'place selected card':card?'select its top card':'empty'}">
      <span class="mini-label">${index+1}</span><strong>${card?(card.wild?'★':card.value):'+'}</strong><small>${pile.length} card${pile.length===1?'':'s'}</small></button>`;
 }
 function seriesBoard(){
  if(!isOnline()||!ui.online.view?.series)return '';
  const series=ui.online.view.series,seat=ui.online.seat,champion=series.champion;
  const participants=ui.online.view.players;
- const result=champion===null?(series.format==='mixed'?'Games Night Mix · first to three wins':'First to three wins')
-   :champion===seat?'YOU ARE THE SERIES CHAMPION':`${escapeHtml(participants[champion]?.name??'Player')} WINS THE SERIES`;
+ const result=champion===null?(series.roundLimit?`Games Night Mix · ${series.played}/${series.roundLimit} rounds`:
+   series.format==='mixed'?'Games Night Mix · first to three wins':'First to three wins')
+   :champion===-1?'GAMES NIGHT FINISHED · JOINT CHAMPIONS':champion===seat?'★ YOU ARE THE HOUSE CHAMPION':
+   `★ ${escapeHtml(participants[champion]?.name??'Player')} IS THE HOUSE CHAMPION`;
  return `<section class="series-board" aria-label="Games night series scoreboard"><div class="series-heading"><span>★ GAMES NIGHT · SERIES ${series.number}</span><strong>${result}</strong></div>
- <div class="series-scores group-series-scores">${series.wins.map((wins,i)=>`<div><small>${i===seat?'You':escapeHtml(participants[i]?.name??`Player ${i+1}`)}</small><strong>${wins}</strong><span>${'●'.repeat(wins)}${'○'.repeat(Math.max(0,series.target-wins))}</span></div>`).join('')}</div>
+ <div class="series-scores group-series-scores">${series.wins.map((wins,i)=>`<div><small>${i===seat?'You':escapeHtml(participants[i]?.name??`Player ${i+1}`)}</small><strong>${series.points?series.points[i]:wins}</strong><span>${series.points?`${wins} wins · ${series.points[i]} points`:`${'●'.repeat(wins)}${'○'.repeat(Math.max(0,series.target-wins))}`}</span></div>`).join('')}</div>
  <p class="series-foot">${series.played} finished ${series.played===1?'match':'matches'} · ${series.draws} ${series.draws===1?'draw':'draws'}${series.history.length?` · Recent results: ${series.history.slice(0,5).map(row=>`${row.mode?`${games.find(g=>g.id===row.mode)?.title||'Table'}: `:''}${row.winner===-1?'Draw':row.winner===seat?'You':escapeHtml(participants[row.winner]?.name??'Player')}`).join(' · ')}`:''}</p></section>`;
 }
 function rematchControl() {
@@ -311,11 +349,14 @@ function hostTableControls() {
 }
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
- <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${ui.online?.view?.paused?'<div class="table-paused" role="status">⏸ The host has paused this table. Moves are temporarily locked.</div>':''}${seriesBoard()}${hostTableControls()}${opponentRail()}${activeStorageNotice()}${tableGuide()}`;
+ <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${ui.online?.view?.paused?'<div class="table-paused" role="status">⏸ The host has paused this table. Moves are temporarily locked.</div>':''}<div class="desktop-table-extras">${seriesBoard()}${hostTableControls()}${opponentRail()}${activeStorageNotice()}${tableGuide()}</div>`;
 }
 function actionSidebar(extra='') {
  const state=ui.game,g=gameInfo();
- return `<aside class="sidebar"><div class="side-panel side-identity"><div class="eyebrow">TABLE DETAILS</div><div class="side-row"><span>Game</span><strong>${g.title}</strong></div><div class="side-row"><span>Opponents</span><strong>${isOnline()?roomOpponents().map(p=>escapeHtml(p.name)).join(', '):'1 House Bot'}</strong></div><div class="side-row"><span>Mode</span><strong>${isOnline()?`Online private · ${ui.online.view.players.length} players`:'Local solo preview'}</strong></div>${isOnline()?`<div class="side-row"><span>Connection</span><strong>${ui.netStatus||'Connecting'} · ${roomOpponents().filter(p=>p.connected).length}/${roomOpponents().length} opponents online</strong></div>`:''}</div>${extra}
+ return `<aside class="sidebar" id="mobile-table-drawer" aria-label="Match details">
+ <div class="mobile-drawer-heading"><strong>Table details</strong><button class="btn btn-outline" data-action="toggle-table-drawer" aria-label="Close game details">Close</button></div>
+ <div class="mobile-extra-info">${seriesBoard()}${hostTableControls()}${opponentRail()}${activeStorageNotice()}${tableGuide()}</div>
+ <div class="side-panel side-identity"><div class="eyebrow">TABLE DETAILS</div><div class="side-row"><span>Game</span><strong>${g.title}</strong></div><div class="side-row"><span>Opponents</span><strong>${isOnline()?roomOpponents().map(p=>escapeHtml(p.name)).join(', '):`${ui.game.players.length-1} House ${ui.game.players.length===2?'Bot':'Bots'}`}</strong></div><div class="side-row"><span>Mode</span><strong>${isOnline()?`Online private · ${ui.online.view.players.length} players`:'Local solo preview'}</strong></div>${isOnline()?`<div class="side-row"><span>Connection</span><strong>${ui.netStatus||'Connecting'} · ${roomOpponents().filter(p=>p.connected).length}/${roomOpponents().length} opponents online</strong></div>`:''}</div>${extra}
  <div class="side-panel log-panel"><h3>Table talk <span class="log-live">● Live</span></h3><ol>${state.log.slice(0,5).map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol></div>
  ${isOnline()?rematchControl():`<button class="reset-btn" data-action="restart">${icon('refresh',15)} Start a fresh match</button>`}
  </aside>`;
@@ -371,7 +412,7 @@ function sequenceScreen() {
   ${canPass?'<button class="btn btn-outline" data-action="seq-pass">Pass — no legal moves</button>':''}
   ${canRefill?'<button class="btn btn-primary" data-action="seq-refill">Refill empty hand</button>':''}
   ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
-  <div class="discard-heading">YOUR TOP DISCARD CARDS <span>Tap one to play it</span></div><div class="discard-choice">${p.discards.map((pile,i)=>`<button class="discard-source ${selected?.type==='discard'&&selected.index===i?'on':''}" data-action="seq-source" data-type="discard" data-index="${i}" ${pile.length?'':'disabled'} aria-pressed="${selected?.type==='discard'&&selected.index===i}">Stack ${i+1}: <b>${pile.at(-1)?.wild?'★':pile.at(-1)?.value??'—'}</b></button>`).join('')}</div>
+
  </div></div>
  ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'MATCH DRAWN':s.winner===0?'YOU WON THE TABLE!':isOnline()?`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`:'THE HOUSE BOT WON'}</strong><span>${s.stalemate?'The deck is exhausted. Fewest stockpile cards wins; a tie is a draw.':s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
  </section>${actionSidebar(side)}</div></main>`;
@@ -549,6 +590,34 @@ function announceStatus(){
  (s.active===0?'Your turn.':`${s.players[s.active]?.name||'Opponent'}’s turn.`)):'');
  if(message!==previousAnnouncement){status.textContent=message;previousAnnouncement=message;}
 }
+function mobileActionBar(){
+ if(ui.screen!=='game'||!ui.game)return '';
+ const state=ui.game,canMove=state.active===0&&state.winner===null&&state.roundWinner==null;
+ let button='<span class="mobile-action-hint">Tap a card to play</span>';
+ if(canMove){
+  if(state.kind==='eights')button=state.drew?'<button data-action="eight-pass">Pass turn</button>':'<button data-action="eight-draw">Draw a card</button>';
+  else if(state.kind==='contract')button=state.step==='draw'?'<button data-action="contract-draw" data-from="deck">Draw a card</button>':
+    ui.selected?.type==='contract-hand'?'<button data-action="contract-discard">Discard selected</button>':'<span class="mobile-action-hint">Lay or discard a card</span>';
+  else if(state.kind==='rack')button=state.step==='draw'?'<button data-action="rack-draw" data-from="deck">Draw a card</button>':
+    '<button data-action="rack-discard">Discard drawn card</button>';
+  else if(state.kind==='low')button=state.step==='draw'?'<button data-action="low-draw" data-from="deck">Draw a card</button>':
+    '<span class="mobile-action-hint">Choose a grid position</span>';
+  else if(state.kind==='tiles')button=ui.selected?.type==='tiles'&&ui.selected.indices.length>=3?
+    '<button data-action="tile-lay">Lay selected tiles</button>':
+    `<button data-action="tile-end" data-draw="${!state.playedThisTurn&&state.draw.length>0}">${state.playedThisTurn?'End turn':'Draw / end turn'}</button>`;
+  else if(state.kind==='sequence'){
+    const source=ui.selected?.type==='stock'?state.players[0].stock.at(-1):
+      ui.selected?.type==='hand'?state.players[0].hand[ui.selected.index]:
+      ui.selected?.type==='discard'?state.players[0].discards[ui.selected.index]?.at(-1):null;
+    const targets=source?sequencePileTargets(state,source):[];
+    button=targets.length?`<button data-action="build" data-index="${targets[0]}">Play on stack ${targets[0]+1}</button>`:
+      state.canRefill||canReplenishSequenceHand(state)?'<button data-action="seq-refill">Refill hand</button>':
+      state.canPass||canPassSequenceTurn(state)?'<button data-action="seq-pass">Pass turn</button>':
+      '<span class="mobile-action-hint">Select a card</span>';
+  }
+ }
+ return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${ui.drawerOpen}">${ui.drawerOpen?'Close details':'Details & log'}</button></nav>`;
+}
 function render(){
  const currentFocus=focusLocator(document.activeElement);
  if(ui.modal&&!previousModal)modalReturnFocus=currentFocus;
@@ -558,6 +627,7 @@ function render(){
  app.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content</a>${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
  <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 24</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
+ app.querySelector?.('.game-page')?.classList.toggle('drawer-open',ui.drawerOpen);
  const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
  if(backdrop)backdrop.inert=Boolean(ui.modal);
  if(ui.modal){
@@ -576,16 +646,31 @@ function start(mode,matchLength=ui.soloContractLength){
  stopOnline();
  const found=games.find(g=>g.id===mode);
  if(!found)return;
- ui.mode=mode;ui.screen='game';ui.selected=null;ui.modal=null;ui.moment=null;ui.matchId=crypto.randomUUID();resetArrangement();
- const seed=sessionSeed();
-   ui.game=found.kind==='sequence'?createSequenceGame({mode,seed}):found.kind==='rack'?createRackGame({mode,seed}):found.kind==='tiles'?createTileGame({mode,seed}):found.kind==='low'?createLowGame({mode,seed}):found.kind==='eights'?createEightGame({mode,seed}):createContractGame({mode,seed,matchLength});
+ ui.mode=mode;ui.screen='game';ui.drawerOpen=false;ui.selected=null;ui.modal=null;ui.moment=null;ui.matchId=crypto.randomUUID();resetArrangement();
+ const seed=sessionSeed(),playerCount=GROUP_GAME_IDS.has(mode)?ui.soloBotCount+1:2;
+   ui.game=found.kind==='sequence'?createSequenceGame({mode,seed,playerCount}):found.kind==='rack'?createRackGame({mode,seed}):found.kind==='tiles'?createTileGame({mode,seed,playerCount}):found.kind==='low'?createLowGame({mode,seed}):found.kind==='eights'?createEightGame({mode,seed,playerCount}):createContractGame({mode,seed,matchLength,playerCount});
+   for(let seat=1;seat<ui.game.players.length;seat++){
+     const avatarId=(ui.avatarId+seat*3-1)%16+1,persona=botPersona(avatarId);
+     ui.game.players[seat].name=persona.name;
+     ui.game.players[seat].avatarId=avatarId;
+   }
  saveSolo();sound('deal');render();window.scrollTo({top:0,behavior:'instant'});
 }
 function checkBotTurn(){
- if(isOnline())return;
- if(ui.game?.active!==1||ui.game?.winner!==null||ui.game?.roundWinner!=null)return;
+ if(isOnline()||!ui.game)return;
  const previous=ui.game;
- ui.game=ui.game.kind==='sequence'?runSequenceBot(ui.game,ui.botDifficulty):ui.game.kind==='rack'?runRackBot(ui.game,ui.botDifficulty):ui.game.kind==='tiles'?runTileBot(ui.game,ui.botDifficulty):ui.game.kind==='low'?runLowBot(ui.game,ui.botDifficulty):ui.game.kind==='eights'?runEightBot(ui.game,ui.botDifficulty):runContractBot(ui.game,ui.botDifficulty);
+ for(let tick=0;tick<ui.game.players.length*3;tick++) {
+   const state=ui.game,seat=state.active;
+   if(seat===0||state.winner!==null||state.roundWinner!=null)break;
+   const persona=botPersona(state.players[seat].avatarId),selected=ui.botDifficulty;
+   const level=selected==='standard'?(persona.style==='reckless'?'easy':persona.style==='planner'?'expert':'standard'):selected;
+   const result=state.kind==='sequence'?runSequenceBot(state,level,seat):state.kind==='rack'?runRackBot(state,level):
+     state.kind==='tiles'?runTileBot(state,level,seat):state.kind==='low'?runLowBot(state,level):
+     state.kind==='eights'?runEightBot(state,level,seat):runContractBot(state,level,seat);
+   if(JSON.stringify(result)===JSON.stringify(state))break;
+   ui.game=result;
+   if(tick%3===0)ui.game.log.unshift(`${state.players[seat].name}: “${persona.taunts[(state.turn??state.round??1)%persona.taunts.length]}”`);
+ }
  showMoment(readGameBeat(previous,ui.game));
  saveSolo();render();
 }
@@ -614,8 +699,8 @@ function roomScreen() {
     return `<main id="main-content" tabindex="-1" class="room-page"><section class="room-panel"><div class="eyebrow">PRIVATE TABLE · ${room.series?.format==='mixed'?'GAMES NIGHT MIX':'SINGLE GAME'} · WAITING FOR PLAYERS</div>
     <h1>Your table is ready.</h1><p>Share the invitation with your friends. Every player gets a private hand and their own turn. The host can also open a safe read-only display on a TV.</p>
     <div class="room-code" aria-label="Room code ${room.code}">${room.code}</div>
-    <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>Ready</span></div>`).join('')}${room.players.length<room.maxPlayers?`<div class="room-player room-empty">${icon('people',25)}<b>${room.players.length} of ${room.maxPlayers} seats filled</b><span>Waiting for more friends</span></div>`:''}</div>
-    ${room.seat===0&&room.maxPlayers>2&&room.players.length>=3?'<button class="btn btn-primary" data-action="room-start">Start game now</button>':''}<button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
+    <div class="room-players">${room.players.map(p=>`<div class="room-player"><img src="${asset(p.avatar).image}" alt=""><b>${escapeHtml(p.name)}</b><span>${p.bot?'Computer opponent':'Ready'}</span></div>`).join('')}${room.players.length<room.maxPlayers?`<div class="room-player room-empty">${icon('people',25)}<b>${room.players.length} of ${room.maxPlayers} seats filled</b><span>Waiting for more friends</span></div>`:''}</div>
+    ${room.seat===0&&room.maxPlayers>2&&room.players.length>=3?'<button class="btn btn-primary" data-action="room-start">Start game now</button>':''}${room.seat===0&&room.players.length<room.maxPlayers?'<button class="btn btn-outline" data-action="host-bot-fill">Fill empty seats with House Bots</button>':''}${room.seat===0&&room.players.at(-1)?.bot?'<button class="btn btn-outline" data-action="host-bot-remove">Remove last bot</button>':''}<button class="btn btn-primary" data-action="room-invite">${icon('people')} Copy invitation link</button><button class="btn btn-outline" data-action="home">Leave lobby</button>
     <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · ${room.maxPlayers} seats available. ${room.maxPlayers>2?'Host can start with 3 or more players.':'Game starts when your friend joins.'}</p>
     ${hostTableControls()}${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
   }
@@ -637,11 +722,15 @@ function roomScreen() {
     <input id="room-name" class="room-input" maxlength="24" autocomplete="nickname" placeholder="Your name" value="${escapeHtml(ui.roomName)}">
     ${joining?`<label class="room-label" for="room-code">SIX-CHARACTER ROOM CODE</label>
       <input id="room-code" class="room-input room-code-input" maxlength="6" autocomplete="off" spellcheck="false" value="${escapeHtml(ui.roomCode)}">`
-      :`<label class="room-label" for="room-game">CHOOSE YOUR FIRST GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select><label class="room-label" for="room-format">GAMES NIGHT FORMAT</label><select id="room-format" class="room-input"><option value="single" ${ui.roomFormat==='single'?'selected':''}>One game · first to three wins</option><option value="mixed" ${ui.roomFormat==='mixed'?'selected':''}>Games Night Mix · new game each match</option></select><p class="room-small">Mix rotates through all ten games in two-player mode. Eight tables support 3–6 players in single-game mode; all players vote on rematches. Games Night Mix remains two-player.</p><label class="room-label" for="room-length">CONTRACT MATCH LENGTH</label><select id="room-length" class="room-input"><option value="full" ${ui.roomMatchLength==='full'?'selected':''}>Full · all missions</option><option value="quick" ${ui.roomMatchLength==='quick'?'selected':''}>Quick · two deals per player, scores break ties</option></select><p class="room-small">This option only applies to Phase Quest, Contract Club, Crown Circuit and Shanghai Nights in single-game tables.</p><label class="room-label" for="room-capacity">PLAYERS AT THE TABLE</label><select id="room-capacity" class="room-input">${[2,3,4,5,6].map(n=>`<option value="${n}" ${ui.roomCapacity===n?'selected':''}>${n} players${n>2?' · eight group games':''}</option>`).join('')}</select>`}
+      :`<label class="room-label" for="room-game">CHOOSE YOUR FIRST GAME</label><select id="room-game" class="room-input">${games.map(g=>`<option value="${g.id}" ${ui.roomMode===g.id?'selected':''}>${g.title}</option>`).join('')}</select><label class="room-label" for="room-format">GAMES NIGHT FORMAT</label><select id="room-format" class="room-input"><option value="single" ${ui.roomFormat==='single'?'selected':''}>One game · first to three wins</option><option value="mixed" ${ui.roomFormat==='mixed'?'selected':''}>Games Night Mix · new game each match</option></select><p class="room-small">Games Night Mix supports 2–6 people and rotates between compatible games. Choose your games below; all seats must vote to continue. For larger groups, Number Ladder and Low Glow are excluded.</p><label class="room-label" for="room-length">CONTRACT MATCH LENGTH</label><select id="room-length" class="room-input"><option value="full" ${ui.roomMatchLength==='full'?'selected':''}>Full · all missions</option><option value="quick" ${ui.roomMatchLength==='quick'?'selected':''}>Quick · two deals per player, scores break ties</option></select><p class="room-small">This option only applies to Phase Quest, Contract Club, Crown Circuit and Shanghai Nights in single-game tables.</p><label class="room-label" for="room-rounds">GAMES NIGHT MIX LENGTH</label><select id="room-rounds" class="room-input"><option value="3">3 rounds</option><option value="5" selected>5 rounds</option><option value="7">7 rounds</option><option value="9">9 rounds</option></select>
+      <fieldset class="room-game-pool"><legend>GAMES NIGHT MIX · CHOOSE YOUR GAMES</legend>
+      ${games.map(g=>`<label class="pool-item"><input type="checkbox" name="room-pool" value="${g.id}" ${g.id!=='low-glow'&&g.id!=='number-ladder'?'checked':''}><span>${escapeHtml(g.title)}</span></label>`).join('')}
+      <p class="room-small">These selections apply only to Games Night Mix. Six-player mode is available for the eight group-compatible games.</p></fieldset>
+      <label class="room-label" for="room-capacity">PLAYERS AT THE TABLE</label><select id="room-capacity" class="room-input">${[2,3,4,5,6].map(n=>`<option value="${n}" ${ui.roomCapacity===n?'selected':''}>${n} players${n>2?' · eight group games':''}</option>`).join('')}</select>`}
     <div class="room-profile"><img src="${asset(ui.avatarId).image}" alt=""> <span>Playing as <b>${asset(ui.avatarId).name}</b></span><button class="btn btn-outline" data-action="avatars">Change</button></div>
     <button class="btn btn-primary room-submit" data-action="${joining?'room-join':'room-host'}">${joining?'Join private table':'Create private table'} ${icon('arrow')}</button>
     <button class="btn btn-ghost" data-action="room-switch">${joining?'Create a room instead':'I have an invite code'}</button>
-    <p class="room-small">2–6 players in eight games, including Phase Quest, Contract Club, Crown Circuit and Shanghai Nights. Number Ladder and Low Glow remain two-player. Games Night Mix is two-player. Multiplayer requires a running Node server.</p>
+    <p class="room-small">2–6 players in eight games, including Phase Quest, Contract Club, Crown Circuit and Shanghai Nights. Number Ladder and Low Glow remain two-player. Games Night Mix supports up to six players with compatible games. Multiplayer requires a running Node server.</p>
     </section></main>`;
 }
 async function callRoom(url,{method='GET',body=null,token=null}={}) {
@@ -737,11 +826,11 @@ async function withRoomAction(action) {
 }
 async function hostTableButton(action) {
  if(!ui.online||ui.online.view?.seat!==0)return;
- const room=ui.online,types={'host-pause':'pause','host-resume':'resume','host-tv-create':'tv-create','host-tv-disable':'tv-disable'};
+ const room=ui.online,types={'host-pause':'pause','host-resume':'resume','host-tv-create':'tv-create','host-tv-disable':'tv-disable','host-bot-fill':'bot-fill','host-bot-remove':'bot-remove'};
  if(!types[action]||room.pending)return;
  room.pending=true;
  try {
-   const result=await callRoom(`/api/rooms/${room.code}/host`,{method:'POST',token:room.token,body:{type:types[action],revision:room.view.revision}});
+   const result=await callRoom(`/api/rooms/${room.code}/host`,{method:'POST',token:room.token,body:{type:types[action],revision:room.view.revision,level:ui.botDifficulty}});
    if(ui.online!==room)return;
    syncRoom(result.view);
    if(result.watchKey){
@@ -771,7 +860,7 @@ async function roomButton(action,control) {
       ui.roomRecovery=null;ui.roomCode='';ui.screen='home';render();return;
     }
     if(action==='room-open') {
-      stopOnline();ui.screen='room';ui.game=null;resetArrangement();ui.roomMode=control.dataset.mode||ui.roomMode;ui.roomCode='';
+      stopOnline();ui.screen='room';ui.game=null;resetArrangement();ui.roomMode=control.dataset.family?chosenFamilyMode(control.dataset.family):control.dataset.mode||ui.roomMode;ui.roomCode='';
       render();return;
     }
     if(action==='room-switch'){ui.roomCode=ui.roomCode?'':' ';render();return;}
@@ -794,7 +883,14 @@ async function roomButton(action,control) {
       const maxPlayers=Number(document.getElementById('room-capacity')?.value||2);
       const matchLength=document.getElementById('room-length')?.value||'full';ui.roomMatchLength=matchLength;
       ui.roomFormat=format;ui.roomCapacity=maxPlayers;
-      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar,format,maxPlayers,matchLength}});
+      const selectedPool=[...document.querySelectorAll('input[name="room-pool"]:checked')].map(input=>input.value);
+      const roundLimit=format==='mixed'?Number(document.getElementById('room-rounds')?.value||5):null;
+      if(format==='mixed'&&!selectedPool.length)throw Error('Choose at least one Games Night Mix game.');
+      if(format==='mixed'&&maxPlayers>2&&selectedPool.some(id=>!GROUP_GAME_IDS.has(id)))
+        throw Error('For 3–6 players, untick Number Ladder and Low Glow.');
+      if(format==='mixed'&&!selectedPool.includes(mode))throw Error('Include the first game in your Games Night Mix selections.');
+      const result=await callRoom('/api/rooms',{method:'POST',body:{mode,name,avatar,format,maxPlayers,matchLength,
+        ...(format==='mixed'?{gamePool:selectedPool,roundLimit}:{})}});
       connectRoom(result.code,result.token,result.view);
     } else if(action==='room-join') {
       const code=(document.getElementById('room-code')?.value||'').trim().toUpperCase();
@@ -887,7 +983,7 @@ app.addEventListener('keydown',event=>{
 app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
   const action=control.dataset.action;
-  if(['host-pause','host-resume','host-tv-create','host-tv-disable'].includes(action)){event.stopImmediatePropagation();hostTableButton(action);return;}
+  if(['host-pause','host-resume','host-tv-create','host-tv-disable','host-bot-fill','host-bot-remove'].includes(action)){event.stopImmediatePropagation();hostTableButton(action);return;}
   if(['room-open','room-switch','room-invite','room-start','room-host','room-join','room-retry-seat','room-forget-seat'].includes(action)){
     event.stopImmediatePropagation();roomButton(action,control);return;
   }
@@ -959,12 +1055,13 @@ app.addEventListener('click',event=>{
  if(!control)return;
  const action=control.dataset.action;
  if(action==='dismiss'&&event.target!==control)return;
- if(['home','scroll-games','avatars','toggle-sound','test-sound','test-tone','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
+ if(['toggle-table-drawer','home','scroll-games','avatars','toggle-sound','test-sound','test-tone','toggle-ambience','close','dismiss','choose-avatar','start','restart','rules','next-round','solo-resume'].includes(action)) {
    switch(action){
+     case 'toggle-table-drawer':ui.drawerOpen=!ui.drawerOpen;render();break;
      case 'home':stopOnline();ui.screen='home';ui.game=null;ui.selected=null;ui.modal=null;ui.moment=null;resetArrangement();render();break;
      case 'scroll-games':document.getElementById('games')?.scrollIntoView({behavior:'smooth'});break;
      case 'avatars':ui.modal='avatars';sound();render();break;
-     case 'rules':if(control.dataset.mode)ui.mode=control.dataset.mode;ui.modal='rules';sound();render();break;
+     case 'rules':if(control.dataset.family)ui.mode=chosenFamilyMode(control.dataset.family);else if(control.dataset.mode)ui.mode=control.dataset.mode;ui.modal='rules';sound();render();break;
      case 'close':case 'dismiss':ui.modal=null;render();break;
      case 'toggle-sound':ui.soundOn=!ui.soundOn;localStorage.setItem('stackhouse.sound',String(ui.soundOn));sampleAudio.setEnabled(ui.soundOn);if(ui.soundOn){contextForAudio();ui.soundStatus='Sound enabled. Press Test to check playback.';}else{ui.soundTestPending=false;ui.soundStatus='Sound muted.';}render();break;
      case 'test-sound':if(!ui.soundOn){ui.soundOn=true;localStorage.setItem('stackhouse.sound','true');sampleAudio.setEnabled(true);}contextForAudio();sampleAudio.resetFailures();ui.soundTestPending=true;ui.soundStatus=ui.soundVolume===0?'Volume is zero. Raise the slider to hear sound.':'Testing sound…';if(ui.soundVolume>0){if(!sampleAudio.play('win',{force:true})){ui.soundTestPending=false;ui.soundStatus=playFallbackSound('win')?'Playing backup tone.':'No audio device detected.';}}render();break;
@@ -983,7 +1080,7 @@ app.addEventListener('click',event=>{
      }
      case 'toggle-ambience':ui.ambienceOn=!ui.ambienceOn;localStorage.setItem('stackhouse.ambience',String(ui.ambienceOn));render();break;
      case 'choose-avatar':ui.avatarId=Number(control.dataset.id);localStorage.setItem('stackhouse.avatar',String(ui.avatarId));sound('success');render();break;
-     case 'start':start(control.dataset.mode);break;
+     case 'start':start(control.dataset.family?chosenFamilyMode(control.dataset.family):control.dataset.mode);break;
      case 'solo-resume':resumeSolo();break;
      case 'restart':start(ui.mode,ui.game?.matchLength??'full');break;
      case 'next-round':runResult(ui.game.kind==='low'?lowNextRound(ui.game):nextContractRound(ui.game),true);break;
@@ -1063,6 +1160,7 @@ app.addEventListener('input',event=>{
  setSoundStatus(ui.soundVolume===0?'Volume is zero. Move the slider up and press Test.':`Volume ${ui.soundVolume}%. Press Test to check audio.`);
 });
 app.addEventListener('change',event=>{
+ if(event.target?.id==='solo-bot-count'){const number=Number(event.target.value);if(Number.isInteger(number)&&number>=1&&number<=5)ui.soloBotCount=number;return;}
  if(event.target?.id==='solo-contract-length' &&['quick','full'].includes(event.target.value)){ui.soloContractLength=event.target.value;return;}
  if(event.target?.id==='bot-level' &&allowedBotLevels.includes(event.target.value)){
   ui.botDifficulty=event.target.value;

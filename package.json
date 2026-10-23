@@ -1,9 +1,9 @@
 {
   "name": "stackhouse-social",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "type": "module",
-  "description": "Ten original card games, secure private tables for 2–6 players in eight games, original avatars and two-player Games Night Mix.",
+  "description": "Six premium card and tile game families, ten rule sets, and secure private Games Night Mix for up to six players.",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",

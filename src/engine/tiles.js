@@ -46,9 +46,9 @@ export function tileEndTurn(input,drawCard=false){const s=clone(input);const err
  s.active=(s.active+1)%s.players.length;s.playedThisTurn=false;s.turn++;if(s.winner===null&&s.turnLimit&&s.turn>s.turnLimit)finishTilePoints(s,'Eight turns each completed.');return {state:s};
 }
 function combos(n,k){const out=[],rec=(start,a)=>{if(a.length===k){out.push([...a]);return;}for(let i=start;i<=n-(k-a.length);i++){a.push(i);rec(i+1,a);a.pop();}};rec(0,[]);return out;}
-export function runTileBot(input,difficulty='standard'){let s=clone(input);if(s.active!==1||s.winner!==null)return s;
+export function runTileBot(input,difficulty='standard',seat=1){let s=clone(input);if(s.active!==seat||s.winner!==null)return s;
  for(let pass=0;pass<8&&s.winner===null;pass++){
-  let pick=null,target=null;const rack=s.players[1].rack;
+  let pick=null,target=null;const rack=s.players[seat].rack;
   if(difficulty==='expert') {
    // Look ahead only at the House Bot's own rack and public melds; never read a rival's tiles.
    const candidates=[];

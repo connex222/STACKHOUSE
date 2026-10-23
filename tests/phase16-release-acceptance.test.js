@@ -112,11 +112,11 @@ test('Six-player room restart retains all seats and ignores duplicate moves',{ti
  }finally{await stop(service);await rm(folder,{recursive:true,force:true});}
 });
 
-test('Two-player-only games and mixed tournaments reject larger tables',{timeout:15000},async()=>{
+test('Two-player-only games reject larger tables while compatible mixed tournaments are supported',{timeout:15000},async()=>{
  const port=await freePort();let service;
  try{
   service=await start({port});
-  for(const [mode,format] of [['number-ladder','single'],['low-glow','single'],['eight-shift','mixed']]){
+  for(const [mode,format] of [['number-ladder','single'],['low-glow','single'],['low-glow','mixed']]){
    const response=await api(service.base,'POST','/api/rooms',{mode,maxPlayers:6,format,name:'Valid User',avatar:1});
    assert.equal(response.status,400,`${mode}/${format} unexpectedly accepted 6 players`);
   }

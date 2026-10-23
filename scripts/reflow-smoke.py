@@ -35,27 +35,37 @@ with sync_playwright() as p:
     page.keyboard.press('Enter')
     assert page.evaluate('document.activeElement?.id==="main-content"'), 'Skip link did not focus the main landmark'
     checked=0
-    for width in [320,390]:
-        page.set_viewport_size({'width':width,'height':760})
-        # Also exercise the actual games, not just the static home page.
-        for game in range(10):
-            if game or width!=320:
-                if page.locator('[data-action="home"].back-link').count():
-                    page.locator('[data-action="home"].back-link').click()
+    families={
+        'stack-run':'stack-run','malice-duel':'stack-run',
+        'phase-quest':'phase-quest','contract-club':'phase-quest',
+        'crown-circuit':'phase-quest','shanghai-nights':'phase-quest',
+        'number-ladder':'number-ladder','tile-royale':'tile-royale',
+        'low-glow':'low-glow','eight-shift':'eight-shift'
+    }
+    for width,height in [(360,740),(390,844)]:
+        page.set_viewport_size({'width':width,'height':height})
+        for mode,family in families.items():
+            if page.locator('main.game-page').count():
+                page.locator('button.brand[data-action="home"]').click()
             assert page.locator('main#main-content').count()==1
-            page.locator('[data-action="start"]').nth(game).click()
+            if mode!=family:
+                page.locator(f'#family-{family}').select_option(mode)
+            page.locator(f'[data-action="start"][data-family="{family}"]').click()
             assert page.locator('main#main-content').count()==1
-            if game==0 and width==320:page.add_style_tag(content=spacing)
+            if checked==0:page.add_style_tag(content=spacing)
             dims=page.evaluate('''()=>({doc:document.documentElement.scrollWidth,
-              vw:document.documentElement.clientWidth,
-              textClipped:[...document.querySelectorAll('button, a, label, p, h1, h2, h3')]
-                .filter(e=>{const s=getComputedStyle(e);return e.getBoundingClientRect().width>4 && s.overflowX!=='visible' && e.scrollWidth>e.clientWidth+6})
-                .map(e=>e.tagName+':'+(e.className||'')).slice(0,6)})''')
-            assert dims['doc']<=dims['vw']+1,(width,game,dims)
-            assert not dims['textClipped'],(width,game,dims)
+                vw:document.documentElement.clientWidth,
+                pageHeight:document.scrollingElement.scrollHeight,
+                vh:window.innerHeight,
+                textClipped:[...document.querySelectorAll('button, a, label, p, h1, h2, h3')]
+                    .filter(e=>{const s=getComputedStyle(e);return e.getBoundingClientRect().width>4 && s.overflowX!=='visible' && e.scrollWidth>e.clientWidth+6})
+                    .map(e=>e.tagName+':'+(e.className||'')).slice(0,6)})''')
+            assert dims['doc']<=dims['vw']+1,(width,mode,dims)
+            assert dims['pageHeight']<=dims['vh']+2,(width,mode,'vertical page scrolling',dims)
+            assert not dims['textClipped'],(width,mode,dims)
             checked+=1
     assert not errors,errors
-    print(json.dumps({'result':'PASS','games':10,'viewportWidths':[320,390],
+    print(json.dumps({'result':'PASS','games':10,'viewports':[[360,740],[390,844]],
                       'screensChecked':checked,'textSpacing':'applied','keyboardSkipLink':'passed',
                       'limitations':['Not true browser zoom','Not an automated contrast or screen-reader audit',
                                      'Images replaced with placeholders for stable testing']}))

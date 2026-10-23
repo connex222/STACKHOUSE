@@ -9,7 +9,7 @@ const lounge=await inline('assets/lounge.webp');
 const logo=await inline('assets/logo.webp');
 let css=(await read('styles.css')).replaceAll('/assets/lounge.webp',lounge);
 const sources=[];
-for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo-records.js','src/game-feel.js','src/audio.js','src/room-recovery.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
+for(const file of ['src/rng.js','src/bot-personalities.js','src/hand-order.js','src/solo-save.js','src/solo-records.js','src/game-feel.js','src/audio.js','src/room-recovery.js','src/engine/sequence.js','src/engine/contracts.js','src/engine/rack.js','src/engine/tiles.js','src/engine/lowcard.js','src/engine/eights.js','src/main.js']) {
  let code=await read(file);
  code=code.replace(/^import\s+[^;]*;\s*$/gm,'');
  if(file.startsWith('src/engine/')) code=code.replace(/\bclone\b/g,file.includes('sequence')?'sequenceClone':file.includes('contracts')?'contractClone':file.includes('rack')?'rackClone':file.includes('tiles')?'tileClone':file.includes('lowcard')?'lowClone':'eightClone');
@@ -21,6 +21,7 @@ for(const file of ['src/rng.js','src/hand-order.js','src/solo-save.js','src/solo
   code=code.replaceAll('Play with friends</button>','Play with the bot</button>');
   code=code.replaceAll('<button class="btn btn-ghost" data-action="room-open">Play with the bot</button>','');
   code=code.replaceAll('<button class="tile-play tile-online" data-action="room-open" data-mode="${g.id}">Private table ${icon(\'people\',16)}</button>','');
+  code=code.replaceAll('<button class="tile-play tile-online" data-action="room-open" data-family="${family.id}">Private table ${icon(\'people\',16)}</button>','');
   code=code.replaceAll('Phase 4 · Ten tables','Offline · Ten tables');
   code=code.replaceAll('Solo games + private two-player tables','Play the House Bot offline');
   code=code.replaceAll("restoreRoom();",'');

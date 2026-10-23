@@ -10,7 +10,7 @@ const MAX_SNAPSHOT_LENGTH = 250_000;
 
 export function encodeSoloSave({mode,game,handOrders={},matchId=null}) {
   if(!Object.hasOwn(KINDS,mode)||!game||game.mode!==mode||game.kind!==KINDS[mode]||
-     !Array.isArray(game.players)||game.players.length!==2)throw Error('Cannot save an invalid solo match.');
+     !Array.isArray(game.players)||game.players.length<2||game.players.length>(['number-ladder','low-glow'].includes(mode)?2:6))throw Error('Cannot save an invalid solo match.');
   const payload={version:SOLO_SAVE_VERSION,mode,game,handOrders};
   if(matchId!==null){if(typeof matchId!=='string'||!/^[-a-zA-Z0-9_]{12,90}$/.test(matchId))throw Error('Invalid solo match ID.');payload.matchId=matchId;}
   const encoded=JSON.stringify(payload);
@@ -23,8 +23,8 @@ export function decodeSoloSave(raw) {
     const data=JSON.parse(raw);
     if(!data||data.version!==SOLO_SAVE_VERSION||!Object.hasOwn(KINDS,data.mode)||
        !data.game||data.game.mode!==data.mode||data.game.kind!==KINDS[data.mode]||
-       !Array.isArray(data.game.players)||data.game.players.length!==2||
-       !Number.isInteger(data.game.active)||data.game.active<0||data.game.active>1||
+       !Array.isArray(data.game.players)||data.game.players.length<2||data.game.players.length>(['number-ladder','low-glow'].includes(data.mode)?2:6)||
+       !Number.isInteger(data.game.active)||data.game.active<0||data.game.active>=data.game.players.length||
        !Array.isArray(data.game.log)||!data.handOrders||
        typeof data.handOrders!=='object'||Array.isArray(data.handOrders))return null;
     const handOrders={};
