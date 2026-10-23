@@ -40,3 +40,11 @@ On one iPhone (Safari) and one Android handset (Chrome): join the same room; ver
 **Phase 25 status:** Version 2.6.0 extracts three reusable client views and adds visible-information planning to two Expert bot families. Other bots still use the existing heuristics. Full per-game view separation, bot takeover of disconnected seats, physical-device acceptance and permanent hosting storage are *not* included in this phase.
 
 **Boundaries:** The six-family launcher is a presentation change, not a destructive rewrite of ten game rule sets. Bot strength and real-phone comfort still need human playtesting. The offline edition uses local system fonts and makes no font-network requests.
+
+
+### Phase 26: disconnected-player replacement (host only)
+If a human opponent leaves during an active match, the host can open Table details → Host controls and select **Replace … with a bot**. The server requires at least two minutes since the seat last connected or made an authenticated request; an actively connected player cannot be replaced. Replacement preserves the game position and score, invalidates the absent player's old session and cannot be undone during that match. The host must confirm before proceeding. These restrictions are enforced server-side even if someone bypasses the browser buttons. A server restart begins a fresh two-minute grace period.
+
+House Bots automatically agree to rematches when a human requests one, so an abandoned seat cannot hold up Games Night Mix.
+
+**Important:** This does not restore persistent multiplayer rooms unless Postgres or another genuinely durable storage backend has been configured. Hosts should use this option only when the player has clearly left the match. The displaced player cannot reclaim the same seat during that match.

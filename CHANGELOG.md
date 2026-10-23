@@ -1,3 +1,13 @@
+## v2.7.0 — Phase 26: safer games-night hosting
+
+- Host-only House Bot takeover for a disconnected human seat, after a strict two-minute grace period; no automatic takeover.
+- Authenticated activity resets the grace period, including after a server restart; multiple connected tabs prevent replacement.
+- Replacement keeps the existing hand and turn state private; the old player's access is revoked and the action cannot be undone in the current match.
+- Replaced-seat game state is included in optional persisted snapshots; a failed snapshot save rolls back the entire action.
+- House Bots automatically consent to rematches to prevent stalled tables.
+- Extracted host controls into a testable `src/ui/host-controls.js` module and added UI/security regressions.
+- Unchanged: game rules, paid-storage configuration, physical-device acceptance.
+
 # STACKHOUSE Social — Development archive
 
 This archive preserves earlier release notes. Historical claims are not live production attestations.

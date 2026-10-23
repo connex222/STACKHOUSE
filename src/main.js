@@ -2,6 +2,7 @@ import {renderMobileActionBar} from './ui/mobile-actions.js';
 import {renderRulesMarkup} from './ui/game-instructions.js';
 import {avatars, GROUP_GAME_IDS, games, gameFamilies} from './ui/game-catalogue.js';
 import {createGameAudio} from './audio.js';
+import {renderHostControls} from './ui/host-controls.js';
 import {botPersona} from './bot-personalities.js';
 import {classifyRoomRecovery} from './room-recovery.js';
 import { sessionSeed } from './rng.js';
@@ -316,13 +317,9 @@ function activeStorageNotice(){
 }
 function hostTableControls() {
  if(!isOnline()||ui.online.view?.seat!==0)return '';
- const view=ui.online.view,canPause=view.status==='playing'&&ui.game?.winner===null;
- return `<section class="host-controls" aria-label="Host controls"><div class="eyebrow">HOST CONTROLS · GAMES NIGHT</div>
- <div class="host-buttons"><button class="btn btn-outline" data-action="host-tv-create">${view.tvEnabled?'Replace TV link':'Create TV display link'}</button>
- ${view.tvEnabled?'<button class="btn btn-ghost" data-action="host-tv-disable">Disable TV link</button>':''}
- ${canPause?`<button class="btn btn-outline" data-action="host-${view.paused?'resume':'pause'}">${view.paused?'▶ Resume table':'Ⅱ Pause table'}</button>`:''}</div>
- <p class="host-help">TV displays show scores, turns and shared cards only — never private hands. Replacing or disabling a TV link revokes the previous one.</p></section>`;
+ return renderHostControls({...ui.online.view,game:ui.game},escapeHtml);
 }
+
 function gameTop(g) {
  return `<div class="game-back"><button class="back-link" data-action="home">${icon('back')} All games</button><span class="divider-dot">◆</span><span>${g.category}</span></div>
  <div class="game-heading"><div><div class="eyebrow">${isOnline()?`PRIVATE TABLE · ${ui.online.code}`:'NOW PLAYING · THE HOUSE TABLE'}</div><h1>${g.title}</h1><p>${g.kicker}</p></div><div class="game-heading-actions">${isOnline()?`<button class="btn btn-outline" data-action="room-invite">${icon('people',17)} Invite link</button>`:''}<button class="btn btn-outline" data-action="rules">${icon('info',17)} How to play</button></div>${turnNotice()}</div>${ui.online?.view?.paused?'<div class="table-paused" role="status">⏸ The host has paused this table. Moves are temporarily locked.</div>':''}<div class="desktop-table-extras">${seriesBoard()}${hostTableControls()}${opponentRail()}${activeStorageNotice()}${tableGuide()}</div>`;
@@ -570,7 +567,7 @@ function render(){
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content</a>${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
  ${mobileActionBar()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 24</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 26</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  app.querySelector?.('.game-page')?.classList.toggle('drawer-open',ui.drawerOpen);
  const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
@@ -769,13 +766,19 @@ async function withRoomAction(action) {
     }
   } finally {current.pending=false;}
 }
-async function hostTableButton(action) {
+async function hostTableButton(action,control=null) {
  if(!ui.online||ui.online.view?.seat!==0)return;
- const room=ui.online,types={'host-pause':'pause','host-resume':'resume','host-tv-create':'tv-create','host-tv-disable':'tv-disable','host-bot-fill':'bot-fill','host-bot-remove':'bot-remove'};
+ const room=ui.online,types={'host-pause':'pause','host-resume':'resume','host-tv-create':'tv-create','host-tv-disable':'tv-disable','host-bot-fill':'bot-fill','host-bot-remove':'bot-remove','host-bot-takeover':'bot-takeover'};
  if(!types[action]||room.pending)return;
+ const seat=action==='host-bot-takeover'?Number(control?.dataset.seat):undefined;
+ if(action==='host-bot-takeover') {
+   const player=room.view.players[seat];
+   if(!Number.isInteger(seat)||seat<=0||!player||player.bot||player.connected)return;
+   if(!window.confirm(`Replace ${player.name} with a House Bot? Their saved access will stop working, and this cannot be undone in this match. A player must have been disconnected for two minutes.`))return;
+ }
  room.pending=true;
  try {
-   const result=await callRoom(`/api/rooms/${room.code}/host`,{method:'POST',token:room.token,body:{type:types[action],revision:room.view.revision,level:ui.botDifficulty}});
+   const result=await callRoom(`/api/rooms/${room.code}/host`,{method:'POST',token:room.token,body:{type:types[action],revision:room.view.revision,level:ui.botDifficulty,...(action==='host-bot-takeover'?{seat}:{})}});
    if(ui.online!==room)return;
    syncRoom(result.view);
    if(result.watchKey){
@@ -783,7 +786,7 @@ async function hostTableButton(action) {
      const url=`${location.origin}/tv.html#room=${encodeURIComponent(room.code)}&key=${encodeURIComponent(result.watchKey)}`;
      try{await navigator.clipboard.writeText(url);toast('TV display link copied. Open it on your TV or laptop.');}
      catch{window.prompt('Copy this TV-only spectator link:',url);}
-   }else toast(action==='host-pause'?'Table paused.':action==='host-resume'?'Table resumed.':'TV link disabled.');
+   }else toast(action==='host-pause'?'Table paused.':action==='host-resume'?'Table resumed.':action==='host-bot-takeover'?'The disconnected player was replaced by a House Bot.':'Host action complete.');
  }catch(error){
    try{const view=await callRoom(`/api/rooms/${room.code}/state`,{token:room.token});if(ui.online===room)syncRoom(view);}catch{}
    toast(error.message,true);
@@ -928,7 +931,7 @@ app.addEventListener('keydown',event=>{
 app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
   const action=control.dataset.action;
-  if(['host-pause','host-resume','host-tv-create','host-tv-disable','host-bot-fill','host-bot-remove'].includes(action)){event.stopImmediatePropagation();hostTableButton(action);return;}
+  if(['host-pause','host-resume','host-tv-create','host-tv-disable','host-bot-fill','host-bot-remove','host-bot-takeover'].includes(action)){event.stopImmediatePropagation();hostTableButton(action,control);return;}
   if(['room-open','room-switch','room-invite','room-start','room-host','room-join','room-retry-seat','room-forget-seat'].includes(action)){
     event.stopImmediatePropagation();roomButton(action,control);return;
   }

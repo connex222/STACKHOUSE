@@ -16,6 +16,7 @@ const validActionId = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{12,90}$/.t
 const ACTION_HISTORY_LIMIT = 80;
 export const MAX_STREAMS_PER_SEAT = 3;
 export const MAX_TV_STREAMS = 8;
+export const BOT_TAKEOVER_GRACE_MS = 120_000;
 const token = () => randomBytes(32).toString('base64url');
 const roomCode = () => Array.from({length:6},()=> 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('');
 
@@ -65,6 +66,7 @@ export class RoomStore {
     this.rooms=new Map(); this.storageFile=storageFile;this.snapshotStore=snapshotStore;this.now=now;
     this.storageKind=snapshotStore?'postgres':storageFile?'filesystem-only':'memory-only';
     this.listeners=new Map();this.pendingWrite=Promise.resolve();this.operationQueue=Promise.resolve();
+    this.lastSeen=new Map();this.disconnectedSince=new Map();this.bootedAt=this.now();
   }
   async load() {
     if(!this.storageFile && !this.snapshotStore) return;
@@ -118,6 +120,20 @@ export class RoomStore {
     }finally{release();}
   }
   notify(code) {for(const entry of this.listeners.get(code)??[]) {try {entry.fn();} catch { /* closed connections */ }}}
+  _seatKey(code,seat) {return `${code}:${seat}`;}
+  _isSeatConnected(code,seat) {
+    return [...(this.listeners.get(code)??[])].some(entry=>entry.seat===seat);
+  }
+  _canReplaceSeat(room,seat) {
+    if(room.status!=='playing'||!room.game||room.game.winner!==null||seat<=0||seat>=room.players.length||room.players[seat].bot)return false;
+    if(this._isSeatConnected(room.code,seat))return false;
+    const key=this._seatKey(room.code,seat);
+    // An HTTP-only player is active too. A reconnect or state request resets the clock.
+    // On server restart start the grace period afresh even if stored timestamps are old.
+    const since=Math.max(this.bootedAt,room.startedAt??room.created??this.bootedAt,
+      this.disconnectedSince.get(key)??0,this.lastSeen.get(key)??0);
+    return this.now()-since>=BOT_TAKEOVER_GRACE_MS;
+  }
   canSubscribe(code,seat) {
     // At most three streaming tabs per authenticated seat; other players are unaffected.
     const subscribers=this.listeners.get(code);
@@ -126,11 +142,26 @@ export class RoomStore {
   subscribe(code,fn,seat=null) {
     if(!this.canSubscribe(code,seat))throw Error('Too many open table connections. Close unused tabs.');
     const subscribers=this.listeners.get(code)??new Set();
-    const entry={fn,seat};subscribers.add(entry);this.listeners.set(code,subscribers);this.notify(code);
-    return ()=>{subscribers.delete(entry);if(!subscribers.size)this.listeners.delete(code);this.notify(code);};
+    const entry={fn,seat};subscribers.add(entry);this.listeners.set(code,subscribers);
+    if(Number.isInteger(seat)&&seat>=0) {
+      const key=this._seatKey(code,seat);this.disconnectedSince.delete(key);this.lastSeen.set(key,this.now());
+    }
+    this.notify(code);
+    return ()=>{
+      subscribers.delete(entry);
+      if(!subscribers.size)this.listeners.delete(code);
+      if(Number.isInteger(seat)&&seat>=0&&!this._isSeatConnected(code,seat))
+        this.disconnectedSince.set(this._seatKey(code,seat),this.now());
+      this.notify(code);
+    };
   }
   prune() { // Keep completed and abandoned rooms for seven days, including persisted sessions.
-    for(const [code,room] of this.rooms) if(this.now()-room.updated>7*86400e3 && !this.listeners.has(code))this.rooms.delete(code);
+    for(const [code,room] of this.rooms) if(this.now()-room.updated>7*86400e3 && !this.listeners.has(code)) {
+      this.rooms.delete(code);
+      for(let seat=0;seat<room.players.length;seat++) {
+        const key=this._seatKey(code,seat);this.lastSeen.delete(key);this.disconnectedSince.delete(key);
+      }
+    }
   }
   _find(code) {
     if(!validCode(code)) throw Error('Invalid room code.');
@@ -143,6 +174,7 @@ export class RoomStore {
     if(typeof credential!=='string'||credential.length<30||credential.length>100)throw Error('Access denied. Rejoin using your saved player session.');
     const seat=room.players.findIndex(player=>player.tokenHash===hash(credential));
     if(seat<0)throw Error('Access denied. That session does not belong to this room.');
+    this.lastSeen.set(this._seatKey(code,seat),this.now());
     return {room,seat};
   }
   async create(options) {
@@ -210,7 +242,7 @@ export class RoomStore {
     room.game=securelyDeal(this.createGame(room.mode,seed,room.players.length,room.format==='mixed'?'full':room.matchLength));
     room.game.players.forEach((p,i)=>{p.name=room.players[i].name;});
     room.game.log=[`Private table ready: ${room.players.map(p=>p.name).join(', ')}.`];
-    room.status='playing';room.paused=false;room.rematchVotes=Array(room.players.length).fill(false);
+    room.status='playing';room.startedAt=this.now();room.paused=false;room.rematchVotes=Array(room.players.length).fill(false);
     room.series=createSeries(1,room.players.length);
     if(room.format==='mixed'&&Number.isInteger(room.roundLimit)) {
       room.series.roundLimit=room.roundLimit;
@@ -246,7 +278,7 @@ export class RoomStore {
   view(code,credential) {
     const {room,seat}=this._auth(code,credential);
     return {code:room.code,mode:room.mode,matchLength:room.matchLength??'full',status:room.status,paused:Boolean(room.paused),tvEnabled:Boolean(room.tvEnabled),revision:room.revision,seat,maxPlayers:room.maxPlayers??2,rematchVotes:room.rematchVotes??[false,false],series:publicSeries(room),
-      players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,bot:Boolean(p.bot),connected:Boolean(p.bot)||[...(this.listeners.get(code)??[])].some(s=>s.seat===i)})),game:projectGame(room.game,seat),
+      players:room.players.map((p,i)=>({name:p.name,avatar:p.avatar,bot:Boolean(p.bot),connected:Boolean(p.bot)||this._isSeatConnected(code,i),takeoverEligible:seat===0?this._canReplaceSeat(room,i):false})),game:projectGame(room.game,seat),
       storage:this.storageKind};
   }
   /** A completely separate, allowlisted projection for TV. Never reuse projectGame here:
@@ -282,7 +314,7 @@ export class RoomStore {
       const {room,seat}=this._auth(code,credential);
       if(seat!==0)throw Error('Only the host can manage this table.');
       if(!action||typeof action!=='object'||Array.isArray(action))throw Error('Invalid host action.');
-      if(!['pause','resume','tv-create','tv-disable','bot-fill','bot-remove'].includes(action.type))throw Error('Unknown host action.');
+      if(!['pause','resume','tv-create','tv-disable','bot-fill','bot-remove','bot-takeover'].includes(action.type))throw Error('Unknown host action.');
       if(action.revision!==room.revision)throw Error('The table changed before your action. Please try again.');
       let watchKey=null;
       if(action.type==='bot-fill'||action.type==='bot-remove') {
@@ -301,6 +333,20 @@ export class RoomStore {
           if(room.players.length<=1||!room.players.at(-1).bot)throw Error('The last seat is not a removable bot.');
           room.players.pop();
         }
+      } else if(action.type==='bot-takeover') {
+        if(!Number.isInteger(action.seat)||!this._canReplaceSeat(room,action.seat))
+          throw Error('That seat is still active, or has not been disconnected for two minutes.');
+        const target=room.players[action.seat];
+        const level=action.level??'standard';
+        if(!['easy','standard','expert'].includes(level))throw Error('Choose a valid bot difficulty.');
+        const original=target.name;
+        // Irreversible within this match: invalidate the former human credential.
+        // Never give a host access to the abandoned human's private cards.
+        target.tokenHash=null;target.bot=true;target.botLevel=level;
+        target.replacedName=original;target.name=`House Bot (${original})`;
+        if(room.game?.players[action.seat])room.game.players[action.seat].name=target.name;
+        room.game?.log?.unshift(`House Bot has taken over ${original}'s vacant seat.`);
+        if(!room.paused)this._advanceBots(room);
       } else if(action.type==='pause'||action.type==='resume') {
         if(room.status!=='playing'||!room.game||room.game.winner!==null)throw Error('Only an active table can be paused or resumed.');
         const paused=action.type==='pause';
@@ -349,7 +395,10 @@ export class RoomStore {
       const votes=room.rematchVotes??Array(room.players.length).fill(false);
       const choice=action.type==='rematch-request';
       if(votes[seat]===choice)throw Error(choice?'You have already requested a rematch.':'No rematch request to cancel.');
-      votes[seat]=choice;room.rematchVotes=votes;
+      votes[seat]=choice;
+      // House Bots agree to the next game automatically; no non-human token can vote.
+      if(choice)room.players.forEach((player,i)=>{if(player.bot)votes[i]=true;});
+      room.rematchVotes=votes;
       if(votes.every(Boolean)) {
         beginNextGame(room);
         room.game=securelyDeal(this.createGame(room.mode,randomBytes(4).readUInt32BE(),room.players.length,room.format==='mixed'?'full':room.matchLength));
