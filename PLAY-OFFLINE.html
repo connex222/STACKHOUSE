@@ -369,7 +369,8 @@ html,body,.site-wrap{max-width:100%;min-width:0;}
  .game-page.drawer-open .sidebar .mobile-extra-info>*{margin-bottom:10px}
  .mobile-action-bar{display:flex;position:fixed;z-index:50;left:0;right:0;bottom:0;min-height:62px;padding:7px 11px calc(7px + env(safe-area-inset-bottom));gap:8px;align-items:center;background:#061e24;border-top:1px solid #cfb47c;box-shadow:0 -8px 28px #0008}
  .mobile-action-bar button{flex:1;min-height:46px;border-radius:12px;font-size:14px;font-weight:800;background:#e4c37c;color:#123039;border:0}
- .mobile-action-bar .mobile-details-button{flex:0 0 42%;color:#fff1d1;border:1px solid #b59e6e;background:#12393e}
+ .mobile-action-bar .mobile-rules-button{flex:0 0 22%;color:#fff1d1;border:1px solid #b59e6e;background:#12393e}
+ .mobile-action-bar .mobile-details-button{flex:0 0 31%;color:#fff1d1;border:1px solid #b59e6e;background:#12393e}
  .mobile-action-hint{flex:1;text-align:center;font-size:13px;color:#e8e6d7}
  .game-page .group-opponents{display:flex;overflow-x:auto;flex-wrap:nowrap;gap:5px;margin:8px 0}
  .game-page .group-opponent{flex:0 0 145px;min-width:0;min-height:42px;padding:6px}
@@ -886,7 +887,7 @@ function renderMobileActionBar({screen,game,selected,drawerOpen}, {sequencePileT
       '<span class="mobile-action-hint">Select a card</span>';
   }
  }
- return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${drawerOpen}">${drawerOpen?'Close details':'Details & log'}</button></nav>`;
+ return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-rules-button" data-action="rules" aria-label="How to play">Rules</button><button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${drawerOpen}">${drawerOpen?'Close details':'Details & log'}</button></nav>`;
 }
 
 
