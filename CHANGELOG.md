@@ -1,3 +1,9 @@
+## Final acceptance preflight — v2.9.1
+
+- Added read-only offline and live-health release preflight, including strict PostgreSQL durability checking.
+- CI runs the new preflight after building and running regression tests.
+- Physical-device, native assistive-technology and human difficulty acceptance remain outstanding; no paid storage was created.
+
 ## Phase 28 — v2.9.0 — Game-screen modularisation
 
 - Extracted all six game table renderers into `src/ui/screens/` while preserving their original action selectors and game-state projections.

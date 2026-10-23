@@ -1,6 +1,6 @@
 {
   "name": "stackhouse-social",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "private": true,
   "type": "module",
   "description": "Six premium card and tile game families, ten rule sets, and secure private Games Night Mix for up to six players.",
@@ -11,7 +11,8 @@
     "test:network": "node --test tests/phase12-network-acceptance.test.js",
     "build": "node scripts/build-offline.js && node scripts/build.js",
     "build:offline": "node scripts/build-offline.js",
-    "audio:normalise": "node scripts/normalise-audio.mjs"
+    "audio:normalise": "node scripts/normalise-audio.mjs",
+    "release:preflight": "node scripts/release-preflight.js"
   },
   "engines": {
     "node": ">=20"

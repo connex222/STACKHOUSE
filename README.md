@@ -37,7 +37,7 @@ On one iPhone (Safari) and one Android handset (Chrome): join the same room; ver
 
 `server.js` starts the HTTP/SSE service; `src/server/rooms.js` authenticates seats, enforces revisions and persists room state; `src/server/game-modules.js` adapts the six game engines to a common interface; `src/server/projections.js` redacts private hands; `src/engine/` contains pure rules; `src/main.js` orchestrates state, actions and accessibility; `src/ui/screens/` contains six independent game screen renderers; `src/ui/` also contains the family catalogue, instructions, host controls and mobile action bar; `src/engine/sequence-planner.js` and `src/engine/eight-planner.js` hold bounded bot strategies; `src/tv.js` is the TV spectator view. See [MODULE-GUIDE.md](MODULE-GUIDE.md) for adding a game and [CHANGELOG.md](CHANGELOG.md) for the preserved phase history.
 
-**Current state (v2.9.0):** Six independent tabletop renderers, multi-seat House Bots, disconnected-player replacement and bounded Expert planning are implemented. Physical-device acceptance and durable Render hosting remain outstanding. Expert difficulty has not been calibrated with human players.
+**Current state (v2.9.1):** Six independent tabletop renderers, multi-seat House Bots, disconnected-player replacement and bounded Expert planning are implemented. Physical-device acceptance and durable Render hosting remain outstanding. Expert difficulty has not been calibrated with human players.
 
 **Boundaries:** The six-family launcher is a presentation change, not a destructive rewrite of ten game rule sets. Bot strength and real-phone comfort still need human playtesting. The offline edition uses local system fonts and makes no font-network requests.
 
@@ -58,3 +58,7 @@ Number Ladder Expert now makes bounded, public-information forecasts of its next
 Six game table renderers now live in `src/ui/screens/{sequence,contract,rack,tile,low,eight}.js`; the client shell retains game state, session management, accessible controls and action validation. The offline builder includes these modules in dependency order. Tests render all ten rule variants using real engine states and check keyboard landmarks and solo actions. No game rules or public network contracts change.
 
 **Not signed off:** Render room persistence is still memory-only until a database is connected; real iPhone, Android and TV testing must be performed on hardware; native screen-reader testing and human bot balancing are still required. The code refactor does not resolve these release gates.
+
+
+### Final release preflight — v2.9.1
+Run `npm run build && npm test && npm run release:preflight` before deploying. To check the live service without making changes: `npm run release:preflight -- --url https://stackhouse-m50w.onrender.com`. Add `--require-durable` for a strict storage gate; it deliberately fails until PostgreSQL is connected and healthy. The preflight cannot sign off physical iPhone, Android, TV, screen-reader or human bot-difficulty testing.
