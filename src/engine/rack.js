@@ -1,4 +1,5 @@
 import { mulberry32, shuffle } from '../rng.js';
+import {rackPositionCost,chooseRackExpertDraw,chooseRackExpertReplace} from './rack-planner.js';
 
 const clone = state => structuredClone(state);
 export const RACK_SIZE = 10;
@@ -75,27 +76,18 @@ function rackCost(cards) {
   }
   return penalty;
 }
-function rackExpertCost(cards){
-  let penalty=0;
-  for(let i=0;i<cards.length;i++){
-    for(let j=i+1;j<cards.length;j++)if(cards[i].value>=cards[j].value)penalty+=40;
-    const ideal=((i+.5)*RACK_MAX/RACK_SIZE);
-    penalty+=Math.abs(cards[i].value-ideal)*.8;
-    if(i>0&&cards[i].value-cards[i-1].value>15)penalty+=(cards[i].value-cards[i-1].value-15)*1.5;
-  }
-  return penalty;
-}
+
 export function runRackBot(input,difficulty='standard',reshuffle=null) {
   let state=clone(input);
   if(state.active!==1||state.winner!==null)return state;
   const me=state.players[1];
-  const cost=difficulty==='expert'?rackExpertCost:rackCost;
+  const cost=difficulty==='expert'?rackPositionCost:rackCost;
   const current=cost(me.rack);
   const top=state.discard.at(-1);
   const preview=card=>me.rack.map((old,i)=>cost(me.rack.map((value,j)=>j===i?card:value))).reduce((a,b)=>Math.min(a,b),Infinity);
   let from=top&&preview(top)<current?'discard':'deck';
   if(difficulty==='easy')from='deck';
-  if(difficulty==='expert'&&top&&preview(top)<current)from='discard';
+  if(difficulty==='expert')from=chooseRackExpertDraw(me.rack,top);
   let outcome=rackDraw(state,from,reshuffle);
   if(outcome.error)return state;
   state=outcome.state;
@@ -104,6 +96,9 @@ export function runRackBot(input,difficulty='standard',reshuffle=null) {
   if(difficulty==='easy'){
     const ideal=state.held?.value??0;const index=Math.max(0,Math.min(9,Math.floor((ideal-1)/6)));
     outcome= Math.abs(state.players[1].rack[index].value-ideal)>5?rackReplace(state,index):rackDiscard(state);
+  }else if(difficulty==='expert'){
+    const slot=chooseRackExpertReplace(state.players[1].rack,state.held,state.discard);
+    outcome=slot!==null?rackReplace(state,slot):rackDiscard(state);
   }else outcome=minimum<current?rackReplace(state,costs.indexOf(minimum)):rackDiscard(state);
   return outcome.error?state:outcome.state;
 }

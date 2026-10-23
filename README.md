@@ -48,3 +48,7 @@ If a human opponent leaves during an active match, the host can open Table detai
 House Bots automatically agree to rematches when a human requests one, so an abandoned seat cannot hold up Games Night Mix.
 
 **Important:** This does not restore persistent multiplayer rooms unless Postgres or another genuinely durable storage backend has been configured. Hosts should use this option only when the player has clearly left the match. The displaced player cannot reclaim the same seat during that match.
+
+
+### Phase 27: stronger Expert bot planning
+Number Ladder Expert now makes bounded forecasts of an estimated future draw and places cards with follow-up options in mind. Low Glow Expert evaluates the benefits of clearing columns, replacing high-penalty cards and uncovering hidden cards, treating every unrevealed value as unknown. Both strategies keep the existing game rules and are included in the offline build. Verify with `npm test` and `npm run build`. Database provisioning and real-phone acceptance remain outstanding.

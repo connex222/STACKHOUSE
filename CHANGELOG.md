@@ -773,3 +773,11 @@ Use the deployed URL on at least one real iPhone (Safari), one Android (Chrome),
 7. **Recovery and hosting:** Confirm the current `/health` shows `durableStorage:false` until PostgreSQL is enabled. If restart survival is required, approve a database plan first, connect `DATABASE_URL` securely, then repeat the restart scenario on a test room (never on someone's active table).
 
 **Release gates:** automated testing and a successful Render deployment are necessary, but **not sufficient**. Hold final multiplayer production sign-off until physical cross-device and accessibility checks pass and the persistence decision is documented. No chargeable PostgreSQL service is created automatically.
+
+
+## Phase 27 — Expert strategy maintenance
+- Added `src/engine/rack-planner.js` and `src/engine/low-planner.js` for Number Ladder and Low Glow.
+- Added win-first ladder replacement planning and public-information draw estimates; added low-card column scoring and reveal decisions.
+- Added five targeted regression tests including hidden-information privacy and 35 seeded-turn legality checks.
+- Updated standalone offline bundling to include both new planner modules.
+- Existing game rules, multiplayer security and room credentials remain unchanged. Storage and physical-device testing are still outstanding.
