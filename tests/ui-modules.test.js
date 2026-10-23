@@ -32,3 +32,10 @@ test('Offline builder includes modular UIs and both planners before their consum
  assert.ok(files.indexOf('game-catalogue.js')<files.indexOf("'src/main.js'"));
  assert.ok(files.indexOf('sequence-planner.js')<files.indexOf("'src/engine/sequence.js'"));
 });
+
+test('Playing screens insert the mobile action bar exactly once',async()=>{
+ const src=await readFile(new URL('../src/main.js',import.meta.url),'utf8');
+ const render=src.slice(src.indexOf('function render(){'),src.indexOf('function start(',src.indexOf('function render(){')));
+ assert.match(render,/\$\{mobileActionBar\(\)\}/);
+ assert.equal(render.split('${mobileActionBar()}').length-1,1);
+});

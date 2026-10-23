@@ -87,17 +87,19 @@ try:
             watch_key=created['watchKey']
             tv.goto(f'{base}/tv.html#room={code}&key={watch_key}',wait_until='domcontentloaded')
             expect(tv.locator('.tv-player')).to_have_count(4,timeout=10000)
-            # Mobile layout hides the eyebrow visually: check the DOM text.
+            # Mobile CSS hides the eyebrow visually; text_content still checks its DOM text.
             assert 'PRIVATE TABLE' in host.locator('.game-heading').text_content()
             assert 'Host' in tv.locator('.tv-grid').inner_text()
             assert tv.locator('.hand-piece').count()==0
             assert tv.locator('.tv-footer').inner_text().count('Read-only screen')==1
             assert tv.evaluate('document.documentElement.scrollWidth <= innerWidth + 5')
             # Host pause and resume, as experienced live in independent page contexts.
-            host.locator('[data-action="host-pause"]').click()
+            # Mobile host controls are intentionally kept in the Details drawer.
+            host.locator('.mobile-details-button').click()
+            host.locator('.game-page.drawer-open [data-action="host-pause"]:visible').click()
             expect(tv.locator('.tv-paused')).to_be_visible(timeout=10000)
             expect(pages[1].locator('.table-paused')).to_be_visible(timeout=10000)
-            host.locator('[data-action="host-resume"]').click()
+            host.locator('.game-page.drawer-open [data-action="host-resume"]:visible').click()
             expect(tv.locator('.tv-paused')).to_have_count(0,timeout=10000)
             # Simulate a transient server failure exactly during saved-seat recovery.
             guest=pages[1]
@@ -114,7 +116,7 @@ try:
             expect(guest.locator('.game-heading')).to_be_visible(timeout=10000)
             assert guest.evaluate('code=>localStorage.getItem(`stackhouse.room.${code}`)',code)==stored
             # Revoke the link. The still-open TV stream must cease and show an error.
-            host.locator('[data-action="host-tv-disable"]').click()
+            host.locator('.game-page.drawer-open [data-action="host-tv-disable"]:visible').click()
             expect(tv.locator('.tv-error')).to_be_visible(timeout=10000)
             assert not errors,errors
             print(json.dumps({'result':'PASS','independentMobileBrowserSessions':4,
