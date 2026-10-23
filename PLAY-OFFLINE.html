@@ -554,6 +554,16 @@ function createGameAudio({Audio=globalThis.Audio,clock=()=>Date.now(),onPlayback
 }
 
 
+// src/room-recovery.js
+/**
+ * Only an authoritative invalid-seat response may remove a locally saved room token.
+ * HTTP 5xx, network errors, temporary service warm-ups and timeouts are recoverable.
+ */
+function classifyRoomRecovery(error) {
+  return error?.status === 401 || error?.status === 404 ? 'invalid-seat' : 'retryable';
+}
+
+
 // src/engine/sequence.js
 
 const SETTINGS = Object.freeze({
@@ -1426,6 +1436,7 @@ function runEightBot(input,difficulty='standard'){
 
 
 
+
 const avatars = [
  'The Host','The Strategist','The Sunshine','The Gentleman','The Rebel','The Captain','The Star','The Professor',
  'The Drifter','The Ace','The Maverick','The Gamer','The Duchess','The Joker','The Ranger','The Trendsetter'
@@ -1448,7 +1459,7 @@ const allowedBotLevels=['easy','standard','expert'];
 const storedBotLevel=localStorage.getItem('stackhouse.botDifficulty');
 const storedSoundVolume=Number(localStorage.getItem('stackhouse.soundVolume') ?? 85);
 const initialSoundVolume=Number.isFinite(storedSoundVolume)?Math.max(0,Math.min(100,storedSoundVolume)):85;
-const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,roomMatchLength:'full',soloContractLength:'full',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
+const ui={screen:'home',mode:null,game:null,online:null,roomMode:'stack-run',roomFormat:'single',roomCapacity:2,roomMatchLength:'full',soloContractLength:'full',botDifficulty:allowedBotLevels.includes(storedBotLevel)?storedBotLevel:'standard',roomCode:'',roomName:localStorage.getItem('stackhouse.nickname')||'',netStatus:'',roomRecovery:null,avatarId:avatars.some(a=>a.id===savedAvatar)?savedAvatar:1,
   soundOn:localStorage.getItem('stackhouse.sound')!=='false',soundVolume:initialSoundVolume,soundStatus:'Press Test to check audio.',soundTestPending:false,audioSettingsOpen:false,ambienceOn:localStorage.getItem('stackhouse.ambience')==='true',moment:null,momentTimer:null,lowAction:'replace',modal:null,selected:null,toast:null,toastTimer:null,handOrders:{},arranging:false,arrangeFrom:null,orderMessage:'',orderUndo:[],matchId:null};
 const app=document.getElementById('app');
 // Browser storage can be disabled (e.g. privacy mode). The games still work.
@@ -1970,7 +1981,7 @@ function render(){
  const motionSignature=ui.screen==='game'?visibleHandSignature(ui.game):'';
  const handChanged=motionSignature!==lastMotionSignature;
  app.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content</a>${header()}${ui.screen==='home'?homeScreen():ui.screen==='room'?roomScreen():ui.game?.kind==='sequence'?sequenceScreen():ui.game?.kind==='rack'?rackScreen():ui.game?.kind==='tiles'?tileScreen():ui.game?.kind==='low'?lowScreen():ui.game?.kind==='eights'?eightScreen():contractScreen()}
- <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 22</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
+ <footer class="site-footer"><span>STACKHOUSE SOCIAL <span class="diamond">◆</span> TEN TABLES · PHASE 24</span><span>Original games · UK English · ${isOnline()?'Server-authoritative private multiplayer':'Solo games + private group tables'}</span></footer></div>
  ${modalContent()}${ui.toast?`<div class="toast ${ui.toast.error?'error':''}" role="status">${escapeHtml(ui.toast.message)}</div>`:''}${ui.moment?`<div class="moment-toast" role="status">${escapeHtml(ui.moment.message)}</div>`:''}`;
  const backdrop=typeof app.querySelector==='function'?app.querySelector('.site-wrap'):null;
  if(backdrop)backdrop.inert=Boolean(ui.modal);
@@ -2033,6 +2044,17 @@ function roomScreen() {
     <p class="room-small">${escapeHtml(ui.netStatus||'Connected')} · ${room.maxPlayers} seats available. ${room.maxPlayers>2?'Host can start with 3 or more players.':'Game starts when your friend joins.'}</p>
     ${hostTableControls()}${room.storage==='memory-only'?'<p class="room-small room-storage-warning" role="status">This table is not saved across server restarts. Finish your match before a service update.</p>':room.storage==='filesystem-only'?'<p class="room-small room-storage-warning" role="status">Room recovery depends on the server having persistent disk storage.</p>':''}</section></main>`;
   }
+  if(ui.roomRecovery){
+    const code=escapeHtml(ui.roomRecovery.code);
+    return `<main id="main-content" tabindex="-1" class="room-page"><section class="room-panel" aria-labelledby="recovery-heading">
+      <div class="eyebrow">PRIVATE TABLE · RECOVERY</div><h1 id="recovery-heading">Your seat is still saved.</h1>
+      <p>We could not reach table <strong>${code}</strong>. It may be a temporary connection or server problem. Your saved player session has <strong>not</strong> been deleted.</p>
+      <p class="room-small" role="status">${escapeHtml(ui.roomRecovery.message)}</p>
+      <button class="btn btn-primary room-submit" data-action="room-retry-seat">Retry saved seat</button>
+      <button class="btn btn-outline" data-action="room-forget-seat">Forget this seat on this device</button>
+      <p class="room-small">If you share this phone, use Forget seat once you have finished playing. It removes your saved access from this browser, not the active table.</p>
+    </section></main>`;
+  }
   const joining=Boolean(ui.roomCode);
   return `<main id="main-content" tabindex="-1" class="room-page"><section class="room-panel"><div class="eyebrow">THE PRIVATE LOUNGE</div>
     <h1>${joining?'Join a friend.':'Host a private table.'}</h1><p>Play live from separate phones or homes. Your cards are dealt by the server, and opponents cannot see your hand.</p>
@@ -2050,7 +2072,7 @@ function roomScreen() {
 async function callRoom(url,{method='GET',body=null,token=null}={}) {
   const response=await fetch(url,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(token?{authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
   let result;try{result=await response.json();}catch{throw Error('The game server returned an unexpected response.');}
-  if(!response.ok)throw Error(result.error||'The game server rejected the request.');
+  if(!response.ok){const error=Error(result.error||'The game server rejected the request.');error.status=response.status;throw error;}
   return result;
 }
 function syncRoom(view) {
@@ -2070,7 +2092,7 @@ function syncRoom(view) {
   render();
 }
 function connectRoom(code,token,view) {
-  stopOnline();resetArrangement();ui.online={code,token,seat:view.seat,view:null};ui.netStatus='Connecting';syncRoom(view);
+  stopOnline();resetArrangement();ui.roomRecovery=null;ui.online={code,token,seat:view.seat,view:null};ui.netStatus='Connecting';syncRoom(view);
   localStorage.setItem(`stackhouse.room.${code}`,token);
   localStorage.setItem('stackhouse.lastRoom',code);
   const uri=new URL(location.href);uri.searchParams.set('room',code);history.replaceState(null,'',uri);
@@ -2085,7 +2107,12 @@ async function liveRoomStream(epoch) {
     try {
       const current=ui.online;
       const response=await fetch(`/api/rooms/${current.code}/events`,{headers:{authorization:`Bearer ${current.token}`,accept:'text/event-stream'},signal:controller.signal,cache:'no-store'});
-      if(!response.ok)throw Error(response.status===401?'Private room session expired.':'Could not connect to the game server.');
+      if(response.status===401||response.status===404){
+        ui.netStatus=response.status===401?'Session expired':'Table no longer available';
+        localStorage.removeItem(`stackhouse.room.${current.code}`);
+        render();return;
+      }
+      if(!response.ok)throw Error('Could not connect to the game server.');
       ui.netStatus='Connected';render();failures=0;keepAlive();
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
       while(epoch===networkSequence) {
@@ -2155,6 +2182,19 @@ async function hostTableButton(action) {
 }
 async function roomButton(action,control) {
   try {
+    if(action==='room-retry-seat'){
+      if(!ui.roomRecovery)return;
+      const code=ui.roomRecovery.code;
+      const token=localStorage.getItem(`stackhouse.room.${code}`);
+      if(token)await recoverRoomSeat(code,token);
+      else {ui.roomRecovery=null;ui.roomCode=code;render();}
+      return;
+    }
+    if(action==='room-forget-seat'){
+      if(ui.roomRecovery){const code=ui.roomRecovery.code;localStorage.removeItem(`stackhouse.room.${code}`);
+        if(localStorage.getItem('stackhouse.lastRoom')===code)localStorage.removeItem('stackhouse.lastRoom');}
+      ui.roomRecovery=null;ui.roomCode='';ui.screen='home';render();return;
+    }
     if(action==='room-open') {
       stopOnline();ui.screen='room';ui.game=null;resetArrangement();ui.roomMode=control.dataset.mode||ui.roomMode;ui.roomCode='';
       render();return;
@@ -2273,7 +2313,7 @@ app.addEventListener('click',event=>{
   const control=event.target.closest('[data-action]');if(!control)return;
   const action=control.dataset.action;
   if(['host-pause','host-resume','host-tv-create','host-tv-disable'].includes(action)){event.stopImmediatePropagation();hostTableButton(action);return;}
-  if(['room-open','room-switch','room-invite','room-start','room-host','room-join'].includes(action)){
+  if(['room-open','room-switch','room-invite','room-start','room-host','room-join','room-retry-seat','room-forget-seat'].includes(action)){
     event.stopImmediatePropagation();roomButton(action,control);return;
   }
   if(!isOnline())return;
@@ -2313,15 +2353,29 @@ app.addEventListener('click',event=>{
 },true);
 
 // An invite opens the join screen, while your own stored seat reconnects automatically.
+async function recoverRoomSeat(code,token){
+  try {
+    const view=await callRoom(`/api/rooms/${code}/state`,{token});
+    connectRoom(code,token,view);
+    return true;
+  }catch(error){
+    if(classifyRoomRecovery(error)==='invalid-seat'){
+      // Only authoritative invalid/expired responses may erase a saved seat.
+      localStorage.removeItem(`stackhouse.room.${code}`);
+      ui.roomRecovery=null;ui.roomCode=code;ui.screen='room';render();
+    }else{
+      // Transient 5xx responses, timeouts and network outages must not strand players.
+      ui.roomRecovery={code,message:error.message||'The server is not responding.'};
+      ui.roomCode=code;ui.screen='room';render();
+    }
+    return false;
+  }
+}
 async function restoreRoom() {
   const code=new URL(location.href).searchParams.get('room')?.trim()?.toUpperCase();
   if(!code||!/^[A-Z2-9]{6}$/.test(code))return;
   const token=localStorage.getItem(`stackhouse.room.${code}`);
-  if(token) {
-    try {
-      const view=await callRoom(`/api/rooms/${code}/state`,{token});connectRoom(code,token,view);return;
-    }catch {localStorage.removeItem(`stackhouse.room.${code}`);}
-  }
+  if(token){await recoverRoomSeat(code,token);return;}
   ui.roomCode=code;ui.screen='room';render();
 }
 
