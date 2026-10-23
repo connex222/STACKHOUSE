@@ -1524,7 +1524,85 @@ function runContractBot(input,level='standard',seat=1,reshuffle=null) {
 }
 
 
+// src/engine/rack-planner.js
+// Expert Number Ladder strategy. Uses only the acting player's rack and the
+// face-up discard, never the opponent rack, the hidden deck or the RNG seed.
+
+function rackPositionCost(cards){
+  let cost=0;
+  for(let i=0;i<cards.length;i++){
+    for(let j=i+1;j<cards.length;j++)if(cards[i].value>=cards[j].value)cost+=40;
+    const ideal=(i+.5)*RACK_MAX/RACK_SIZE;
+    cost+=Math.abs(cards[i].value-ideal)*.8;
+    if(i>0&&cards[i].value-cards[i-1].value>15)
+      cost+=(cards[i].value-cards[i-1].value-15)*1.5;
+  }
+  return cost;
+}
+
+const cardAt=(value)=>({value});
+const changed=(rack,card,index)=>rack.map((old,i)=>i===index?card:old);
+
+function bestRackReplacement(rack,card){
+  if(!card||rack.length!==RACK_SIZE)return null;
+  const before=rackPositionCost(rack);
+  let best=null;
+  for(let index=0;index<RACK_SIZE;index++){
+    const after=changed(rack,card,index);
+    const winning=isSortedRack(after);
+    const cost=winning?-1e6:rackPositionCost(after);
+    if(cost<before-0.0001 && (!best || cost<best.cost))best={index,cost,winning};
+  }
+  return best;
+}
+
+// A hypothetical *uniform* next draw is used for planning, not a peek at
+// actual hidden cards. Publicly seen cards are excluded from that model.
+function expectedRackFollowUp(rack,publicDiscard=[]){
+  const known=new Set([...rack,...publicDiscard].filter(Boolean).map(c=>c.value));
+  const baseline=rackPositionCost(rack);
+  let sum=0,n=0;
+  for(let value=1;value<=RACK_MAX;value++){
+    if(known.has(value))continue;
+    const replacement=bestRackReplacement(rack,cardAt(value));
+    sum+=replacement?Math.max(-1000,replacement.cost):baseline;
+    n++;
+  }
+  return n?sum/n:baseline;
+}
+
+function chooseRackExpertDraw(rack,faceUpDiscard){
+  const existing=rackPositionCost(rack);
+  const discardMove=bestRackReplacement(rack,faceUpDiscard);
+  if(!discardMove)return 'deck';
+  if(discardMove.winning)return 'discard';
+  const nextDrawExpectation=expectedRackFollowUp(rack,faceUpDiscard?[faceUpDiscard]:[]);
+  // Public guaranteed improvement beats the expected unknown draw, with a
+  // modest allowance for taking a useful discard now rather than gambling.
+  return discardMove.cost<=Math.min(existing-1.5,nextDrawExpectation+1.5)?'discard':'deck';
+}
+
+// Before using the held card, compare its immediate effect with the expected
+// shape of the rack after another draw. This is one-ply lookahead: legal
+// actions only, no invented game state or access to hidden cards.
+function chooseRackExpertReplace(rack,held,publicDiscard=[]){
+  const baseline=rackPositionCost(rack);
+  let choice=null;
+  for(let index=0;index<rack.length;index++){
+    const candidate=changed(rack,held,index);
+    if(isSortedRack(candidate))return index;
+    const immediate=rackPositionCost(candidate);
+    if(immediate>=baseline-0.0001)continue;
+    const next=expectedRackFollowUp(candidate,publicDiscard);
+    const weighted=.75*immediate+.25*next;
+    if(!choice||weighted<choice.score)choice={index,score:weighted};
+  }
+  return choice?.index??null;
+}
+
+
 // src/engine/rack.js
+
 
 const rackClone = state => structuredClone(state);
 const RACK_SIZE = 10;
@@ -1601,27 +1679,18 @@ function rackCost(cards) {
   }
   return penalty;
 }
-function rackExpertCost(cards){
-  let penalty=0;
-  for(let i=0;i<cards.length;i++){
-    for(let j=i+1;j<cards.length;j++)if(cards[i].value>=cards[j].value)penalty+=40;
-    const ideal=((i+.5)*RACK_MAX/RACK_SIZE);
-    penalty+=Math.abs(cards[i].value-ideal)*.8;
-    if(i>0&&cards[i].value-cards[i-1].value>15)penalty+=(cards[i].value-cards[i-1].value-15)*1.5;
-  }
-  return penalty;
-}
+
 function runRackBot(input,difficulty='standard',reshuffle=null) {
   let state=rackClone(input);
   if(state.active!==1||state.winner!==null)return state;
   const me=state.players[1];
-  const cost=difficulty==='expert'?rackExpertCost:rackCost;
+  const cost=difficulty==='expert'?rackPositionCost:rackCost;
   const current=cost(me.rack);
   const top=state.discard.at(-1);
   const preview=card=>me.rack.map((old,i)=>cost(me.rack.map((value,j)=>j===i?card:value))).reduce((a,b)=>Math.min(a,b),Infinity);
   let from=top&&preview(top)<current?'discard':'deck';
   if(difficulty==='easy')from='deck';
-  if(difficulty==='expert'&&top&&preview(top)<current)from='discard';
+  if(difficulty==='expert')from=chooseRackExpertDraw(me.rack,top);
   let outcome=rackDraw(state,from,reshuffle);
   if(outcome.error)return state;
   state=outcome.state;
@@ -1630,6 +1699,9 @@ function runRackBot(input,difficulty='standard',reshuffle=null) {
   if(difficulty==='easy'){
     const ideal=state.held?.value??0;const index=Math.max(0,Math.min(9,Math.floor((ideal-1)/6)));
     outcome= Math.abs(state.players[1].rack[index].value-ideal)>5?rackReplace(state,index):rackDiscard(state);
+  }else if(difficulty==='expert'){
+    const slot=chooseRackExpertReplace(state.players[1].rack,state.held,state.discard);
+    outcome=slot!==null?rackReplace(state,slot):rackDiscard(state);
   }else outcome=minimum<current?rackReplace(state,costs.indexOf(minimum)):rackDiscard(state);
   return outcome.error?state:outcome.state;
 }
@@ -1711,7 +1783,62 @@ function runTileBot(input,difficulty='standard',seat=1){let s=tileClone(input);i
 }
 
 
+// src/engine/low-planner.js
+// Public-information planning for Low Glow. The value of a face-down grid
+// card must NEVER influence a decision until it has been revealed.
+const UNKNOWN_AVERAGE=5.3;
+
+function chooseLowExpertDraw(grid,discardTop){
+  if(!discardTop)return 'deck';
+  const visible=grid.filter(c=>c.revealed&&!c.cleared);
+  const bestTarget=Math.max(UNKNOWN_AVERAGE,...visible.map(c=>c.value));
+  if(discardTop.value<=2 || bestTarget-discardTop.value>=4)return 'discard';
+  // A matching visible pair makes the third card valuable, even if it is high.
+  for(let column=0;column<4;column++){
+    const cells=[grid[column],grid[column+4],grid[column+8]];
+    if(cells.filter(c=>c.revealed&&!c.cleared&&c.value===discardTop.value).length===2 &&
+       cells.some(c=>!c.revealed&&!c.cleared))return 'discard';
+  }
+  return 'deck';
+}
+
+function columnBonus(grid,index,value){
+  const column=index%4;
+  const cells=[column,column+4,column+8];
+  const other=cells.filter(i=>i!==index).map(i=>grid[i]);
+  const matches=other.filter(c=>c.revealed&&!c.cleared&&c.value===value).length;
+  if(matches===2)return 15+Math.max(0,value)*3;
+  if(matches===1)return Math.max(0,value)*.6+1.5;
+  return 0;
+}
+
+function chooseLowExpertAction(grid,held,drawnFrom){
+  if(!held)return null;
+  let best=null;
+  for(let index=0;index<grid.length;index++){
+    const old=grid[index];
+    if(old.cleared)continue;
+    const assumedOld=old.revealed?old.value:UNKNOWN_AVERAGE;
+    // Visible pairs are useful; breaking one loses future clearing options.
+    const loss=old.revealed?columnBonus(grid,index,old.value)*.45:0;
+    const score=assumedOld-held.value+columnBonus(grid,index,held.value)-loss;
+    if(!best||score>best.score)best={type:'replace',index,score};
+  }
+  if(drawnFrom==='deck'){
+    for(let index=0;index<grid.length;index++){
+      if(grid[index].revealed||grid[index].cleared)continue;
+      // Revealing an unknown tile keeps its unknown points but makes that
+      // information usable on later turns; its face-down value is ignored.
+      const score=1.6+(grid.filter(c=>!c.revealed&&!c.cleared).length<=3?1.2:0);
+      if(!best||score>best.score)best={type:'flip',index,score};
+    }
+  }
+  return best&&{type:best.type,index:best.index};
+}
+
+
 // src/engine/lowcard.js
+
 
 const lowClone=structuredClone;
 function lowDeck(seed=42){let n=0;return shuffle([[-2,5],[-1,10],[0,15],...Array.from({length:12},(_,i)=>[i+1,10])].flatMap(([value,copies])=>Array.from({length:copies},()=>({id:`l${++n}`,value}))),mulberry32(seed));}
@@ -1731,21 +1858,11 @@ function lowReplace(input,index){const s=lowClone(input);if(s.step!=='place'||s.
 function lowFlip(input,index){const s=lowClone(input);if(s.step!=='place'||s.drawnFrom!=='deck'||s.winner!==null||s.roundWinner!==null)return {error:'Only a deck draw can be discarded to reveal a card.'};const g=s.players[s.active].grid;if(!Number.isInteger(index)||index<0||index>=12||g[index].revealed||g[index].cleared)return {error:'Choose a hidden card to reveal.'};s.discard.push(s.held);g[index].revealed=true;s.log.unshift(`${s.players[s.active].name} revealed a hidden card.`);return {state:afterTurn(s)};}
 function lowNextRound(input){const s=lowClone(input);if(s.roundWinner===null||s.winner!==null)return {error:'Round is not finished.'};s.round++;return {state:deal(s)};}
 function runLowBot(input,difficulty='standard',reshuffle=null){let s=lowClone(input);if(s.active!==1||s.winner!==null||s.roundWinner!==null)return s;const g=s.players[1].grid;const visible=g.map((c,i)=>({...c,index:i})).filter(c=>!c.cleared&&c.revealed).sort((a,b)=>b.value-a.value);const top=s.discard.at(-1);
- const useDiscard=difficulty==='easy'?false:top&&(visible[0]?.value>top.value||top.value<=3);let r=lowDraw(s,useDiscard?'discard':'deck',reshuffle);if(r.error)return s;s=r.state;
+ const useDiscard=difficulty==='easy'?false:difficulty==='expert'?chooseLowExpertDraw(g,top)==='discard':top&&(visible[0]?.value>top.value||top.value<=3);let r=lowDraw(s,useDiscard?'discard':'deck',reshuffle);if(r.error)return s;s=r.state;
  const old=s.players[1].grid,highest=old.map((c,i)=>({...c,index:i})).filter(c=>!c.cleared&&c.revealed).sort((a,b)=>b.value-a.value)[0];const hidden=old.findIndex(c=>!c.revealed&&!c.cleared);
  if(difficulty==='expert') {
-   // Use only revealed values to identify an immediately clearable column.
-   let clearing=-1;
-   for(let col=0;col<4;col++){
-    const positions=[col,col+4,col+8],faceUp=positions.filter(i=>old[i].revealed&&!old[i].cleared);
-    if(faceUp.length===2&&old[faceUp[0]].value===s.held.value&&old[faceUp[1]].value===s.held.value){
-     clearing=positions.find(i=>!old[i].cleared&&!old[i].revealed)??-1;if(clearing!==-1)break;
-    }
-   }
-   if(clearing!==-1)r=lowReplace(s,clearing);
-   else if(highest&&highest.value>s.held.value)r=lowReplace(s,highest.index);
-   else if(hidden!==-1)r=s.drawnFrom==='deck'&&s.held.value>=8?lowFlip(s,hidden):lowReplace(s,hidden);
-   else if(highest)r=lowReplace(s,highest.index);
+   const decision=chooseLowExpertAction(old,s.held,s.drawnFrom);
+   if(decision)r=decision.type==='flip'?lowFlip(s,decision.index):lowReplace(s,decision.index);
   }else if(difficulty==='easy')r=hidden!==-1?lowReplace(s,hidden):highest?lowReplace(s,highest.index):{error:'No available grid position.'};
  else if(highest&&highest.value>s.held.value&&(highest.value-s.held.value>2||hidden===-1))r=lowReplace(s,highest.index);
  else if(hidden!==-1)r=s.drawnFrom==='deck'&&s.held.value>=7?lowFlip(s,hidden):lowReplace(s,hidden);
