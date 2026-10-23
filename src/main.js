@@ -1,3 +1,9 @@
+import {createSequenceScreen} from './ui/screens/sequence.js';
+import {createContractScreen} from './ui/screens/contract.js';
+import {createRackScreen} from './ui/screens/rack.js';
+import {createTileScreen} from './ui/screens/tile.js';
+import {createLowScreen} from './ui/screens/low.js';
+import {createEightScreen} from './ui/screens/eight.js';
 import {renderMobileActionBar} from './ui/mobile-actions.js';
 import {renderRulesMarkup} from './ui/game-instructions.js';
 import {avatars, GROUP_GAME_IDS, games, gameFamilies} from './ui/game-catalogue.js';
@@ -256,28 +262,6 @@ function playerBadge(name,image,meta,active=false) {
   name=escapeHtml(name);meta=escapeHtml(meta);
   return `<div class="player-identity ${active?'player-active':''}"><img src="${image}" alt=""><div><b>${name}</b><small>${meta}</small></div>${active?'<span class="turn-pill">YOUR TURN</span>':''}</div>`;
 }
-function seqCard(card,action,attributes='',chosen=false) {
-  if (!card) return `<div class="card-slot empty-slot"><span>+</span></div>`;
-  const top=card.wild?'★':card.value;
-  return `<button class="play-card ${card.wild?'wild-card':'number-card'} ${chosen?'selected-card':''}" data-action="${action}" ${attributes} ${action==='seq-source'?`aria-pressed="${chosen}"`:''} aria-label="${card.wild?'Wild card':`Card ${card.value}`}">
-    <span class="corner-value">${top}</span><span class="card-core">${top}</span><span class="corner-suit">${card.wild?'WILD':'◆'}</span></button>`;
-}
-function buildPile(state,index) {
-  const pile=state.builds[index], last=pile.at(-1);
-  const selected=ui.selected&&ui.selected.type!=='bot'&&state.active===0;
-  const player=state.players[0];
-  const source=ui.selected ? (ui.selected.type==='stock'?player.stock.at(-1):ui.selected.type==='hand'?player.hand[ui.selected.index]:player.discards[ui.selected.index]?.at(-1)) : null;
-  const valid=selected && sequencePileTargets(state,source).includes(index);
-  return `<button class="build-stack ${valid?'valid-target':''}" data-action="build" data-index="${index}" aria-label="Building stack ${index+1}; next ${last?last.playedValue+1:1}">
-   <span class="stack-label">STACK ${String(index+1).padStart(2,'0')}</span><span class="stack-number">${last?last.playedValue:'+'}</span><span class="stack-next">${last?`NEXT ${last.playedValue+1}`:'START WITH 1'}</span></button>`;
-}
-function seqDiscardPile(pile,index,owner='human') {
-  const card=pile.at(-1);
-  const choosing=owner==='human'&&ui.selected?.type==='hand';
-  const action=owner!=='human'?'no-op':choosing?'seq-discard-dest':'seq-source';
-  return `<button class="mini-pile ${choosing?'pile-available':''}" data-action="${action}" data-type="discard" data-index="${index}" ${!card&&!choosing?'disabled':''} aria-pressed="${ui.selected?.type==='discard'&&ui.selected.index===index}" aria-label="Discard pile ${index+1}: ${choosing?'place selected card':card?'select its top card':'empty'}">
-     <span class="mini-label">${index+1}</span><strong>${card?(card.wild?'★':card.value):'+'}</strong><small>${pile.length} card${pile.length===1?'':'s'}</small></button>`;
-}
 function seriesBoard(){
  if(!isOnline()||!ui.online.view?.series)return '';
  const series=ui.online.view.series,seat=ui.online.seat,champion=series.champion;
@@ -364,126 +348,18 @@ function reorderHand(zone,from,to){
 }
 function resetArrangement(){ui.handOrders={};ui.orderUndo=[];ui.arranging=false;ui.arrangeFrom=null;ui.orderMessage='';}
 
-function sequenceScreen() {
- const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo();
- const isHuman=s.active===0&&s.winner===null;
- const canPass=isHuman&&(isOnline()?Boolean(s.canPass):canPassSequenceTurn(s));
- const canRefill=isHuman&&(isOnline()?Boolean(s.canRefill):canReplenishSequenceHand(s));
- const selected=ui.selected;
- const side=`<div class="side-panel objectives"><span class="eyebrow">YOUR OBJECTIVE</span><h3>Empty the stockpile.</h3><p>Build the centre stacks upwards from 1 to 12. Play from your stockpile, hand, or the top of your discard stacks.</p>
-   <div class="progress-row"><span>Stockpile remaining</span><b>${p.stock.length} / ${s.rules.stock}</b></div><div class="track"><span style="width:${Math.round((s.rules.stock-p.stock.length)/s.rules.stock*100)}%"></span></div>
-   <div class="side-tip">${icon('sparkle',16)} Tip: play your stockpile first whenever possible.</div></div>`;
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner">
-  <div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${bot.stock.length} cards in stockpile`)}<div class="bot-cards">${Array.from({length:Math.min(5,bot.hand.length)},()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
-  <div class="felt-area"><div class="board-section-label">SHARED BUILDING STACKS</div><div class="build-grid">${s.builds.map((_,i)=>buildPile(s,i)).join('')}</div>
-   <div class="board-hint">${s.winner!==null?'The match is over.':canRefill?'Refill your hand from the available deck.':canPass?'No cards or playable moves remain. Pass your turn.': selected?.type==='hand'?'Choose a green stack to play, or a discard pile to finish your turn.': selected?'Choose a highlighted building stack.':'Select a card, then select a building stack.'}</div>
-  </div>
-  <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.stock.length} cards left in your stockpile`,isHuman)}</div>
-  <div class="your-tableau"><div class="hand-heading"><b>YOUR STOCKPILE</b><b>YOUR DISCARD STACKS</b></div><div class="stock-discard-row"><div class="stock-zone">${seqCard(p.stock.at(-1),'seq-source','data-type="stock" data-index="0"',selected?.type==='stock')}</div><div class="four-mini-piles">${p.discards.map((pile,i)=>seqDiscardPile(pile,i)).join('')}</div></div>
-  <div class="hand-heading"><b>YOUR HAND <span>(${p.hand.length} cards)</span></b><small>${isHuman?'Select a card to play':'Waiting for turn'}</small></div>
-  ${handToolbar('sequence')}<div class="hand-cards reordable-hand">${handItems('sequence',p.hand,(card,i)=>seqCard(card,'seq-source',`data-type="hand" data-index="${i}"`,selected?.type==='hand'&&selected.index===i))}</div>
-  ${canPass?'<button class="btn btn-outline" data-action="seq-pass">Pass — no legal moves</button>':''}
-  ${canRefill?'<button class="btn btn-primary" data-action="seq-refill">Refill empty hand</button>':''}
-  ${selected?.type==='discard'?'<div class="selection-advice">Discard stack selected. Play its top card on a highlighted shared stack.</div>':''}
-
- </div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'MATCH DRAWN':s.winner===0?'YOU WON THE TABLE!':isOnline()?`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`:'THE HOUSE BOT WON'}</strong><span>${s.stalemate?'The deck is exhausted. Fewest stockpile cards wins; a tie is a draw.':s.winner===0?'Your stockpile is clear.':isOnline()?'Your opponent cleared their stockpile first.':'The bot cleared its stockpile first.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
- </section>${actionSidebar(side)}</div></main>`;
-}
-function contractCard(card,i) {
- const shown=card.wild?'★':card.value;
- return `<button class="play-card contract-card suit-${card.colour} ${card.wild?'wild-card':''} ${ui.selected?.type==='contract-hand'&&ui.selected.index===i?'selected-card':''}"
- data-action="contract-card" data-index="${i}" aria-pressed="${ui.selected?.type==='contract-hand'&&ui.selected.index===i}" aria-label="${card.wild?'Wild card':`${card.value}, ${card.colour}`}">
- <span class="corner-value">${shown}</span><span class="card-core">${shown}</span><span class="corner-suit">${card.wild?'WILD':card.colour.toUpperCase()}</span></button>`;
-}
-function contractScreen() {
- const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo(),missions=MISSION_SETS[s.mode],mission=currentMission(s,0);
- const group=isOnline()&&s.players.length>2,roundWinnerName=s.players[s.roundWinner]?.name||'Another player';
- const quick=s.matchLength==='quick',missionGoal=quick?Math.min(s.targetRounds??missions.length,missions.length):missions.length;
- const club=s.mode==='contract-club';
- const contractRanks=s.players.map((player,i)=>`<div class="contract-score-seat ${i===0?'own-contract':''}"><span>${i===0?'You':escapeHtml(player.name)}</span><strong>${player.mission} / ${missionGoal}</strong><small>${player.score} penalty pts${club&&player.laidDown?' · laid':''}</small></div>`).join('');
- const match=club&&p.laidDown?null:findContract(p.hand,mission);
- const canLay=s.active===0&&s.step==='play'&&s.roundWinner===null&&Boolean(match);
- const human=s.active===0&&s.roundWinner===null;
- const drawn=s.step==='play';
- const side=`<div class="side-panel objectives"><span class="eyebrow">CURRENT CONTRACT</span>
- <span class="mission-index">MISSION ${Math.min(p.mission+1,missions.length)} / ${missions.length} · ${quick?'QUICK MATCH':'FULL JOURNEY'}</span><h3>${club&&p.laidDown?'Contract laid — clear your hand':mission?.title||'All missions complete!'}</h3><p>${club&&p.laidDown?'Extend any shared set or run with matching cards. Empty your hand to end the deal.':missionDescription(mission)}</p>
- <div class="track"><span style="width:${Math.round(p.mission/missionGoal*100)}%"></span></div><div class="contract-progress-grid" aria-label="Every player’s contracts and penalty points">${contractRanks}</div>${club?`<p class="board-hint">Deal turn ${s.dealTurns??0} of ${s.dealTurnLimit??s.players.length*10} maximum · Closing time awards the deal to the lowest unplayed-hand points (ties draw).</p>`:''}
- <div class="side-tip">${icon('sparkle',16)} ${club?'Contract Club: laying a contract does not end the deal. Players lay off cards on public melds until somebody goes out. ':''}${quick?'Quick Match ends after '+s.targetRounds+' deals. Most missions wins; tied missions use fewest penalty points.':club?'Be the first to empty your hand.':'Complete the whole contract in one move.'} Wilds can stand in for any value or colour.</div></div>`;
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner contract-table">
- ${group?'':`<div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`Contract ${Math.min(bot.mission+1,missions.length)} of ${missions.length}`)}<div class="bot-cards">${Array.from({length:Math.min(bot.hand.length,6)},()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>`}
- <div class="contract-centre"><div class="eyebrow">ROUND ${s.round}${quick?' / '+s.targetRounds:''} <span class="diamond">◆</span> ${club?'LAY · BUILD ON MELDS · GO OUT':'FIRST TO LAY WINS THE DEAL'}</div>
- <div class="draw-piles"><button class="draw-pile draw-deck" data-action="contract-draw" data-from="deck" ${(!human||drawn)?'disabled':''}>
-   <span class="draw-card-logo">◆</span><b>DRAW DECK</b><small>${s.draw.length} cards</small></button>
- <button class="draw-pile draw-discard" data-action="contract-draw" data-from="discard" ${(!human||drawn)?'disabled':''}>
- <span class="discard-rank">${s.discard.at(-1)?.wild?'★':s.discard.at(-1)?.value??'—'}</span><b>TAKE DISCARD</b><small>${s.discard.at(-1)?.colour||'Empty'}</small></button></div>
- ${club&&s.melds?.length?`<section class="club-melds" aria-label="Public contract melds"><strong>SHARED MELDS — ${s.melds.length}</strong><p>After laying your own contract, select one card and add it to a matching public meld.</p><div class="club-meld-grid">${s.melds.map((meld,i)=>`<button type="button" class="club-meld" data-action="contract-layoff" data-index="${i}" ${human&&drawn&&p.laidDown&&ui.selected?.type==='contract-hand'&&canLayOffContract(p.hand[ui.selected.index],meld)?'':'disabled'} aria-label="Extend ${escapeHtml(meld.kind)} belonging to ${escapeHtml(s.players[meld.owner]?.name??'player')}"><b>${escapeHtml(s.players[meld.owner]?.name??'Player')} · ${escapeHtml(meld.kind)}</b><span>${meld.cards.map(c=>c.wild?'★':c.value).join(' · ')}</span></button>`).join('')}</div></section>`:''}
- ${s.canBuy?`<div class="buy-discard-callout"><strong>Shanghai buying window</strong><p>The active player declined the discard. Take it, plus one face-down penalty card. Once per deal.</p><button class="btn btn-primary" data-action="contract-buy">Buy discarded card + penalty</button></div>`:''}
- <p class="board-hint">${s.roundWinner!==null?'The round has ended.':!human?'Wait for your turn.':drawn?club&&p.laidDown?'Lay off selected cards on the shared melds, or discard one card.':'Now lay your contract, or select one card to discard.':'Draw from the deck or take the top discard card.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`Contract ${Math.min(p.mission+1,missions.length)} of ${missions.length}`,human)}</div>
- <div class="your-tableau"><div class="hand-heading"><b>YOUR CARDS <span>(${p.hand.length})</span></b><small>${s.step==='draw'?'Draw one card first':'Choose your next move'}</small></div>${handToolbar('contract')}<div class="hand-cards contract-hand reordable-hand">${handItems('contract',p.hand,(card,i)=>contractCard(card,i))}</div>
- <div class="contract-actions"><button class="btn btn-primary" data-action="lay-contract" ${canLay?'':'disabled'}>${icon('check',17)} ${club&&p.laidDown?'Contract laid':'Lay my contract'}</button>
- <button class="btn btn-outline" data-action="contract-discard" ${human&&drawn&&ui.selected?.type==='contract-hand'?'':'disabled'}>Discard selected card ${icon('arrow',17)}</button></div>
- ${match&&human&&drawn?'<div class="matched-notice">✨ Your hand contains the full contract. Lay it now!</div>':''}
- </div></div>
- ${s.roundWinner!==null?`<div class="game-banner ${s.roundWinner===0?'win':'lose'}"><strong>${s.roundWinner===-1?'DEAL TIED ON POINTS':s.roundWinner===0?club?'YOU WENT OUT!':'CONTRACT COMPLETE!':isOnline()?`${escapeHtml(roundWinnerName).toUpperCase()} ${club?'WENT OUT':'COMPLETED THE CONTRACT'}`:club?'HOUSE BOT WENT OUT':'HOUSE BOT COMPLETED ITS CONTRACT'}</strong>
- <span>${club?'Players who laid their contracts advance. Unplayed cards count as penalty points.':s.roundWinner===0?'You advanced to the next contract.':isOnline()?`${escapeHtml(roundWinnerName)} advanced. Your contract carries into the next round.`:'The bot advanced. Your contract will carry into the next round.'} ${s.winner!==null?quick?(s.winner===-1?'Quick Match tied on missions and points!':`${escapeHtml(s.players[s.winner]?.name??'A player')} wins Quick Match on missions and points.`):'Match finished!':''}</span>
- ${isOnline()&&s.winner!==null?rematchControl():`<button class="btn btn-primary" data-action="${s.winner!==null?'restart':'next-round'}">${s.winner!==null?'New match':'Next round'} ${icon('arrow')}</button>`}</div>`:''}
- </section>${actionSidebar(side)}</div></main>`;
-}
-function rackScreen() {
- const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo();
- const myTurn=s.active===0&&s.winner===null;
- const replacing=myTurn&&s.step==='replace';
- const side=`<div class="side-panel objectives"><span class="eyebrow">YOUR OBJECTIVE</span><h3>Make a perfect ladder.</h3><p>Arrange all ten cards in strictly ascending order, left to right. Draw, swap a slot or discard, then your opponent takes a turn.</p><div class="side-tip">${icon('sparkle',16)} Aim for smaller numbers on the left and larger numbers on the right.</div></div>`;
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner">
- <div class="opponent-area">${playerBadge(opponentName(),opponentImage(),'Ten hidden ladder cards')}<div class="bot-cards">${bot.rack.map(()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
- <div class="rack-felt"><div class="board-section-label">NUMBER LADDER · 1 TO 60</div><div class="draw-piles"><button class="draw-pile draw-deck" data-action="rack-draw" data-from="deck" ${myTurn&&s.step==='draw'&&(s.draw.length||s.discard.length>1)?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW CARD</b><small>${s.draw.length} left</small></button><button class="draw-pile draw-discard" data-action="rack-draw" data-from="discard" ${myTurn&&s.step==='draw'&&s.discard.length?'':'disabled'}><span class="discard-rank">${s.discard.at(-1)?.value??'—'}</span><b>TAKE DISCARD</b><small>Face up</small></button></div>
- <div class="rack-held">${s.held?`DRAWN CARD <strong>${s.held.value}</strong>`:s.winner!==null?'MATCH ENDED':myTurn?'CHOOSE A PILE TO DRAW':'WAITING FOR OPPONENT'}</div>
- <p class="board-hint">${replacing?'Choose which slot to replace, or discard the drawn card.':s.winner!==null?'The ladder is complete.':'Draw from the deck or take the discard to begin your move.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,'Your ordering rack',myTurn)}</div>
- <div class="your-tableau"><div class="hand-heading"><b>YOUR TEN SLOTS</b><small>${replacing?'Tap a number to replace it':'Keep the numbers in ascending order'}</small></div><div class="rack-cards">${p.rack.map((card,i)=>`<button class="rack-slot" data-action="rack-replace" data-index="${i}" ${replacing?'':'disabled'} aria-label="Slot ${i+1}, card ${card.value}"><small>SLOT ${i+1}</small><strong>${card.value}</strong><span>${replacing?'SWAP':'◆'}</span></button>`).join('')}</div>
- <div class="contract-actions"><button class="btn btn-outline" data-action="rack-discard" ${replacing?'':'disabled'}>Discard drawn card ${icon('arrow',17)}</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===0?'PERFECT LADDER!':isOnline()?'YOUR OPPONENT COMPLETED THE LADDER':'THE HOUSE BOT COMPLETED THE LADDER'}</strong><span>${s.winner===0?'All ten numbers are in order.':'The next match is another chance.'}</span>${isOnline()?rematchControl():`<button class="btn btn-primary" data-action="restart">Play again ${icon('arrow')}</button>`}</div>`:''}
- </section>${actionSidebar(side)}</div></main>`;
-}
-function tileFace(tile,attr='',selected=false){
- if(!tile)return '<span class="tile-back">◆</span>';
- return `<span class="tile-face tile-${tile.colour} ${selected?'tile-selected':''}" ${attr}>${tile.wild?'★':tile.value}<small>${tile.wild?'WILD':tile.colour.toUpperCase()}</small></span>`;
-}
-function tileScreen(){const s=ui.game,p=s.players[0],bot=s.players[1],g=gameInfo(),myTurn=s.active===0&&s.winner===null,indices=ui.selected?.type==='tiles'?ui.selected.indices:[];
- const cards=indices.map(i=>p.rack[i]).filter(Boolean),valid=tileMeld(cards);
- const side=`<div class="side-panel objectives"><div class="eyebrow">YOUR OBJECTIVE</div><h3>${s.turnLimit?'Points Sprint: finish with fewest rack points.':'Empty your tile rack.'}</h3><p>Select three or more tiles that form a matching-value set (different colours), or a same-colour consecutive run. Tap a table group to extend it.</p><p>After playing, end your turn. If you cannot play, draw one tile instead.</p><p>Clearing your rack wins immediately. ${s.turnLimit?'At five or six players, each player gets eight turns; then the fewest remaining rack points wins.':'If the pool runs dry and everybody is blocked, the fewest remaining tile points wins.'} Ties draw.</p>${s.turnLimit?`<div class="side-tip">${icon('sparkle',16)} Turn ${Math.min(s.turn,s.turnLimit)} / ${s.turnLimit} · Aim to shed high tiles and wilds before the points finish.</div>`:''}<div class="side-tip">${icon('sparkle',16)} House rules: existing groups may be extended, but not rearranged.</div></div>`;
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${bot.rack.length} hidden tiles`)}<div class="bot-cards">${Array.from({length:Math.min(8,bot.rack.length)},()=>'<div class="tile-back">◆</div>').join('')}</div></div>
- <div class="tile-board"><div class="board-section-label">TABLE MELDS · TAP TO EXTEND</div><div class="tile-groups">${s.groups.length?s.groups.map((group,i)=>`<button class="tile-meld" data-action="tile-target" data-index="${i}" ${!myTurn||!indices.length?'disabled':''}><small>${group.type.toUpperCase()} ${i+1}</small><span class="tile-group-cards">${group.tiles.map(t=>tileFace(t)).join('')}</span></button>`).join(''):'<p class="board-hint">No groups laid yet. Play the first set or run.</p>'}</div>
- <p class="board-hint">${myTurn?`${indices.length} tile(s) selected${valid?' · Valid '+valid:''}. Choose “Lay new group”, or extend a table group.`:'Waiting for the other player.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.rack.length} tiles remaining`,myTurn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR TILE RACK</b><small>Tap tiles to select several</small></div>${handToolbar('tiles')}<div class="tiles-rack reordable-hand">${handItems('tiles',p.rack,(t,i)=>`<button class="tile-button" data-action="tile-select" data-index="${i}" aria-pressed="${indices.includes(i)}" aria-disabled="${!myTurn}">${tileFace(t,'',indices.includes(i))}</button>`)}</div>
- <div class="contract-actions tile-actions"><button class="btn btn-primary" data-action="tile-lay" ${!myTurn||!valid?'disabled':''}>Lay new group ${icon('check',17)}</button><button class="btn btn-outline" data-action="tile-end" data-draw="false" ${!myTurn||(!s.playedThisTurn&&s.draw.length>0)?'disabled':''}>End turn</button><button class="btn btn-outline" data-action="tile-end" data-draw="true" ${!myTurn||s.playedThisTurn||!s.draw.length?'disabled':''}>Draw a tile (${s.draw.length})</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'RACK POINTS TIED · DRAW':s.winner===0?'YOU CLEARED YOUR RACK!':`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE TABLE`}</strong>${s.finalRackPoints?`<p>Final rack points: ${s.finalRackPoints.map((score,i)=>`${escapeHtml(s.players[i].name)} ${score}`).join(' · ')}</p>`:''}${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
-}
-function lowCell(c,i,myTurn){const hidden=!c.revealed&&!c.cleared;return `<button class="low-card ${hidden?'low-hidden':c.cleared?'low-cleared':c.value<0?'low-negative':''}" data-action="low-slot" data-index="${i}" ${!myTurn||c.cleared?'disabled':''} aria-label="Grid card ${i+1}, ${hidden?'face down':c.cleared?'cleared':c.value}">${c.cleared?'✧':hidden?'◆':c.value}</button>`;}
-function lowScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.roundWinner===null&&s.winner===null;
- const side=`<div class="side-panel objectives"><span class="eyebrow">FOUR ROUND CHALLENGE</span><h3>Keep it low.</h3><p>Draw a card and swap it into your 3 × 4 grid. Alternatively discard a deck draw to reveal a hidden card. Three matching revealed values in a column clear that column.</p><div class="score-box"><span>YOU <b>${p.score} points</b></span><span>${isOnline()?escapeHtml(opponentName()):'BOT'} <b>${opp.score} points</b></span></div><p>Lowest combined score after four rounds wins.</p></div>`;
- const held=s.held&&turn&&s.step==='place';
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`Round ${s.round} · ${opp.score} total points`)}<div class="low-grid low-opponent">${opp.grid.map((c,i)=>lowCell(c,i,false)).join('')}</div></div>
- <div class="low-felt"><div class="eyebrow">ROUND ${s.round} / 4 · FEWEST POINTS WINS</div><div class="draw-piles"><button class="draw-pile draw-deck" data-action="low-draw" data-from="deck" ${turn&&s.step==='draw'?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW DECK</b><small>${s.draw.length} cards</small></button><button class="draw-pile draw-discard" data-action="low-draw" data-from="discard" ${turn&&s.step==='draw'?'':'disabled'}><span class="discard-rank">${s.discard.at(-1)?.value??'—'}</span><b>TAKE DISCARD</b><small>Face up</small></button></div>
- <p class="rack-held">${held?`HELD CARD <strong>${s.held.value}</strong>`:s.roundWinner!==null?'ROUND COMPLETE':turn?'DRAW TO BEGIN YOUR TURN':'WAITING FOR OPPONENT'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.score} points · current grid`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR 3 × 4 GRID</b><small>${held?'Choose where to place your card':'Reveal all cards to finish'}</small></div><div class="low-grid">${p.grid.map((c,i)=>lowCell(c,i,turn&&s.step==='place')).join('')}</div>
- <div class="contract-actions"><button class="btn ${ui.lowAction==='replace'?'btn-primary':'btn-outline'}" data-action="low-mode" data-mode="replace" ${held?'':'disabled'}>Swap into grid</button><button class="btn ${ui.lowAction==='flip'?'btn-primary':'btn-outline'}" data-action="low-mode" data-mode="flip" ${held&&s.drawnFrom==='deck'?'':'disabled'}>Discard & flip</button></div><p class="board-hint">${held?ui.lowAction==='flip'?'Choose a face-down card to reveal.':'Choose a grid position to replace, even one already face up.':'Three equal revealed numbers in one column clear automatically.'}</p></div></div>
- ${s.roundWinner!==null?`<div class="game-banner ${s.winner===-1?'':s.winner===null?'win':s.winner===0?'win':'lose'}"><strong>${s.winner!==null?s.winner===-1?'MATCH TIED':s.winner===0?'LOW-SCORE CHAMPION!':'YOUR OPPONENT WON':`ROUND ${s.round} FINISHED`}</strong><span>Totals: You ${p.score} · ${isOnline()?escapeHtml(opponentName()):'Bot'} ${opp.score} points.</span>${isOnline()&&s.winner!==null?rematchControl():`<button class="btn btn-primary" data-action="${s.winner===null?'next-round':'restart'}">${s.winner===null?'Next round':'New match'}</button>`}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
-}
-const suitsGlyph={hearts:'♥',diamonds:'♦',clubs:'♣',spades:'♠'};
-function eightFace(card,i,turn,s,reorderable=false){const legal=eightCanPlay(card,s);return `<button class="eight-card suit-${card.suit} ${legal&&turn?'eight-legal':''} ${ui.selected?.type==='eight'&&ui.selected.index===i?'selected-card':''}" data-action="eight-card" data-index="${i}" ${card.value===8?`aria-pressed="${ui.selected?.type==='eight'&&ui.selected.index===i}"`:''} ${!turn&&!reorderable?'disabled':''} aria-disabled="${!turn}" aria-label="${card.value===8?'Wild eight':card.value===14?'Ace':card.value===13?'King':card.value===12?'Queen':card.value===11?'Jack':card.value} of ${card.suit}"><small>${card.value===14?'A':card.value===13?'K':card.value===12?'Q':card.value===11?'J':card.value}</small><b>${suitsGlyph[card.suit]}</b></button>`;}
-function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInfo(),turn=s.active===0&&s.winner===null,top=s.discard.at(-1);
- const noDrawPass=!s.draw.length&&s.discard.length<=1&&!p.hand.some(card=>eightCanPlay(card,s));
- const side=`<div class="side-panel objectives"><span class="eyebrow">CARD MATCHING</span><h3>Get rid of every card.</h3><p>Match the discard's suit or rank, or play a wild eight and declare a new suit. Draw once if you need a card; you may then play or pass.</p><div class="side-tip">${icon('sparkle',16)} Play the colour or rank, but save your wild eights for difficult turns.</div></div>`;
- return `<main id="main-content" tabindex="-1" class="game-page">${gameTop(g)}<div class="game-layout"><section class="table-panel"><div class="table-inner"><div class="opponent-area">${playerBadge(opponentName(),opponentImage(),`${opp.hand.length} cards remaining`)}<div class="bot-cards">${opp.hand.map(()=>'<div class="card-back-sm">◆</div>').join('')}</div></div>
- <div class="eight-felt"><div class="board-section-label">ACTIVE SUIT: <b>${suitsGlyph[s.activeSuit]} ${s.activeSuit.toUpperCase()}</b></div><div class="eight-middle"><button class="draw-pile draw-deck" data-action="eight-draw" ${turn&&!s.drew&&(s.draw.length||s.discard.length>1)?'':'disabled'}><span class="draw-card-logo">◆</span><b>DRAW ONE</b><small>${s.draw.length} remaining</small></button><div class="eight-top">${eightFace(top,-1,false,s)}</div></div><p class="board-hint">${turn?'Choose a highlighted card, or draw once.':'Waiting for the other player.'}</p></div>
- <div class="bottom-player">${playerBadge('You',asset(ui.avatarId).image,`${p.hand.length} cards left`,turn)}</div><div class="your-tableau"><div class="hand-heading"><b>YOUR HAND</b><small>${s.drew?'Drawn this turn · play or pass':'Match rank or suit'}</small></div>${handToolbar('eights')}<div class="eight-hand reordable-hand">${handItems('eights',p.hand,(c,i)=>eightFace(c,i,turn,s,true))}</div>
- ${ui.selected?.type==='eight'&&p.hand[ui.selected.index]?.value===8?`<div class="suit-choice"><b>Choose a new suit:</b>${SUITS.map(suit=>`<button class="btn btn-outline" data-action="eight-suit" data-suit="${suit}">${suitsGlyph[suit]} ${suit}</button>`).join('')}</div>`:''}
- <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&(s.drew||noDrawPass)?'':'disabled'}>${noDrawPass?'Pass · deck exhausted':'Pass after drawing'} ${icon('arrow',17)}</button></div></div></div>
- ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'HAND POINTS TIED · DRAW':s.winner===0?'YOU WON THE HAND!':`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE HAND`}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
-}
+// Each game has a separate presentation module. The shared context contains view helpers
+// only; server-authoritative game actions and credentials never enter the templates.
+const gameViewContext=()=>({ui,isOnline,gameInfo,gameTop,actionSidebar,playerBadge,
+ opponentName,opponentImage,asset,escapeHtml,icon,handToolbar,handItems,rematchControl,
+ sequencePileTargets,canPassSequenceTurn,canReplenishSequenceHand,MISSION_SETS,
+ currentMission,missionDescription,findContract,canLayOffContract,tileMeld,eightCanPlay,SUITS});
+const sequenceScreen=()=>createSequenceScreen(gameViewContext());
+const contractScreen=()=>createContractScreen(gameViewContext());
+const rackScreen=()=>createRackScreen(gameViewContext());
+const tileScreen=()=>createTileScreen(gameViewContext());
+const lowScreen=()=>createLowScreen(gameViewContext());
+const eightScreen=()=>createEightScreen(gameViewContext());
 function rulesText(){return renderRulesMarkup(gameInfo(),ui.mode,MISSION_SETS);}
 function modalContent() {
  if(!ui.modal)return '';

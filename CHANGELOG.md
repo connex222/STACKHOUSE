@@ -1,3 +1,11 @@
+## Phase 28 — v2.9.0 — Game-screen modularisation
+
+- Extracted all six game table renderers into `src/ui/screens/` while preserving their original action selectors and game-state projections.
+- Kept room/network actions in the main orchestrator, so the view split does not expose credentials or change server-authoritative mechanics.
+- Updated the offline packager to bundle the new files before `main.js`.
+- Added view rendering regressions across all ten rule sets, and revised the accessibility source check to inspect modular screens.
+- Outstanding: physical device/TV tests, screen-reader validation, real human bot balancing, and production Postgres provisioning by the account owner.
+
 ## v2.7.0 — Phase 26: safer games-night hosting
 
 - Host-only House Bot takeover for a disconnected human seat, after a strict two-minute grace period; no automatic takeover.
@@ -773,11 +781,3 @@ Use the deployed URL on at least one real iPhone (Safari), one Android (Chrome),
 7. **Recovery and hosting:** Confirm the current `/health` shows `durableStorage:false` until PostgreSQL is enabled. If restart survival is required, approve a database plan first, connect `DATABASE_URL` securely, then repeat the restart scenario on a test room (never on someone's active table).
 
 **Release gates:** automated testing and a successful Render deployment are necessary, but **not sufficient**. Hold final multiplayer production sign-off until physical cross-device and accessibility checks pass and the persistence decision is documented. No chargeable PostgreSQL service is created automatically.
-
-
-## Phase 27 — Expert strategy maintenance
-- Added `src/engine/rack-planner.js` and `src/engine/low-planner.js` for Number Ladder and Low Glow.
-- Added win-first ladder replacement planning and public-information draw estimates; added low-card column scoring and reveal decisions.
-- Added five targeted regression tests including hidden-information privacy and 35 seeded-turn legality checks.
-- Updated standalone offline bundling to include both new planner modules.
-- Existing game rules, multiplayer security and room credentials remain unchanged. Storage and physical-device testing are still outstanding.

@@ -6,8 +6,11 @@ const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
 const offline=readFileSync(new URL('../PLAY-OFFLINE.html',import.meta.url),'utf8');
 const ci=readFileSync(new URL('../.github/workflows/accessibility-smoke.yml',import.meta.url),'utf8');
 test('All screens expose a stable, keyboard-focusable main landmark',()=>{
-  const screens=main.match(/<main id="main-content" tabindex="-1" class="/g)||[];
-  assert.equal(screens.length,10,'Home, room, seat recovery and all seven game-layout families have a main landmark');
+  const viewNames=['sequence','contract','rack','tile','low','eight'];
+  const views=viewNames.map(name=>readFileSync(new URL(`../src/ui/screens/${name}.js`,import.meta.url),'utf8'));
+  const screens=[main,...views].flatMap(source=>source.match(/<main id="main-content" tabindex="-1" class="/g)||[]);
+  assert.equal(screens.length,10,'Home, room, seat recovery and all six modular game screens have a main landmark');
+  for(let i=0;i<views.length;i++)assert.match(views[i],/id="main-content" tabindex="-1"/,`${viewNames[i]} view missing main landmark`);
 });
 test('Skip link is the first keyboard target inside the app',()=>{
   assert.match(main,/app\.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content<\/a>/);

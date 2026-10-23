@@ -35,9 +35,9 @@ On one iPhone (Safari) and one Android handset (Chrome): join the same room; ver
 
 ## Project organisation
 
-`server.js` starts the HTTP/SSE service; `src/server/rooms.js` authenticates seats, enforces revisions and persists room state; `src/server/game-modules.js` adapts the six game engines to a common interface; `src/server/projections.js` redacts private hands; `src/engine/` contains pure rules; `src/main.js` orchestrates the browser interface; `src/ui/` contains the family catalogue, instructions and mobile action bar; `src/engine/sequence-planner.js` and `src/engine/eight-planner.js` hold bounded bot strategies; `src/tv.js` is the TV spectator view. See [MODULE-GUIDE.md](MODULE-GUIDE.md) for adding a game and [CHANGELOG.md](CHANGELOG.md) for the preserved phase history.
+`server.js` starts the HTTP/SSE service; `src/server/rooms.js` authenticates seats, enforces revisions and persists room state; `src/server/game-modules.js` adapts the six game engines to a common interface; `src/server/projections.js` redacts private hands; `src/engine/` contains pure rules; `src/main.js` orchestrates state, actions and accessibility; `src/ui/screens/` contains six independent game screen renderers; `src/ui/` also contains the family catalogue, instructions, host controls and mobile action bar; `src/engine/sequence-planner.js` and `src/engine/eight-planner.js` hold bounded bot strategies; `src/tv.js` is the TV spectator view. See [MODULE-GUIDE.md](MODULE-GUIDE.md) for adding a game and [CHANGELOG.md](CHANGELOG.md) for the preserved phase history.
 
-**Phase 25 status:** Version 2.6.0 extracts three reusable client views and adds visible-information planning to two Expert bot families. Other bots still use the existing heuristics. Full per-game view separation, bot takeover of disconnected seats, physical-device acceptance and permanent hosting storage are *not* included in this phase.
+**Current state (v2.9.0):** Six independent tabletop renderers, multi-seat House Bots, disconnected-player replacement and bounded Expert planning are implemented. Physical-device acceptance and durable Render hosting remain outstanding. Expert difficulty has not been calibrated with human players.
 
 **Boundaries:** The six-family launcher is a presentation change, not a destructive rewrite of ten game rule sets. Bot strength and real-phone comfort still need human playtesting. The offline edition uses local system fonts and makes no font-network requests.
 
@@ -51,4 +51,10 @@ House Bots automatically agree to rematches when a human requests one, so an aba
 
 
 ### Phase 27: stronger Expert bot planning
-Number Ladder Expert now makes bounded forecasts of an estimated future draw and places cards with follow-up options in mind. Low Glow Expert evaluates the benefits of clearing columns, replacing high-penalty cards and uncovering hidden cards, treating every unrevealed value as unknown. Both strategies keep the existing game rules and are included in the offline build. Verify with `npm test` and `npm run build`. Database provisioning and real-phone acceptance remain outstanding.
+Number Ladder Expert now makes bounded, public-information forecasts of its next draw and chooses placements that preserve the best future ladder. Low Glow Expert scores potential column clears and concealed-card reveals while treating unrevealed tile values as unknown. These are heuristic strategies, not cheating opponents or guaranteed higher human difficulty. The standalone builder includes both planners. Verify with `npm test` and `npm run build`.
+
+
+### Phase 28: screen modularisation and release checklist
+Six game table renderers now live in `src/ui/screens/{sequence,contract,rack,tile,low,eight}.js`; the client shell retains game state, session management, accessible controls and action validation. The offline builder includes these modules in dependency order. Tests render all ten rule variants using real engine states and check keyboard landmarks and solo actions. No game rules or public network contracts change.
+
+**Not signed off:** Render room persistence is still memory-only until a database is connected; real iPhone, Android and TV testing must be performed on hardware; native screen-reader testing and human bot balancing are still required. The code refactor does not resolve these release gates.
