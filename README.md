@@ -1,6 +1,6 @@
 # STACKHOUSE SOCIAL
 
-**Current source version: v2.2.0 (Phase 22).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
+**Current source version: v2.4.0 (Phase 24).** A private, phone-first collection of ten original house-rule card and tile games with 16 avatars, solo opponents, and server-authoritative multiplayer.
 
 [Play the live game](https://stackhouse-m50w.onrender.com) · [GitHub repository](https://github.com/connex222/STACKHOUSE)
 
@@ -43,6 +43,8 @@ npm start
 
 ## Documentation contents
 
+- [Phase 24 — Release acceptance and recovery](#phase-24)
+- [Phase 23 — Games-night TV and host controls](#phase-23)
 - [Phase 22 — House Bot and interface polish](#phase-22)
 
 - [Release acceptance and testing](#release-validation)
@@ -714,3 +716,32 @@ The Phase 21 follow-up is an intentional **house-rule change** (not a promise to
 **Verification:** `npm test` runs independent spectator redaction, permission, pause, link rotation/revocation, six-game reconnection and persistence-regression checks, plus a live HTTP/SSE acceptance test. `npm run build` also packages the TV HTML/CSS/client assets into `dist` while keeping the standalone bot edition intact.
 
 **Outstanding for production release:** in-person TV overscan/readability tests, real multi-phone network tests, and connecting a durable PostgreSQL room store if continuous matches across Render restarts are required. Native screen-reader accessibility sign-off is also outstanding.
+
+
+<a id="phase-24"></a>
+
+## Phase 24 — Release acceptance and recoverable private seats (v2.4.0)
+
+**Scope:** Stabilise the existing ten games, independent phone/tablet/TV connections, reconnection and host-controlled TV viewing. No new game rules or paid infrastructure.
+
+**Fixed in this phase:** When a player reloaded their browser while a server was temporarily unavailable (including HTTP 503 or a network interruption), the earlier client incorrectly removed their saved player credential. The app now retains the seat, shows **Retry saved seat** with the original room code and offers **Forget this seat on this device** for shared devices. The stored token is invalidated only after a definitive HTTP 401 or 404 response. A game-stream HTTP 401 or 404 also stops its endless retry cycle and displays an actionable status instead.
+
+**Automated acceptance:**
+
+- `npm test`: regression coverage for HTTP sessions, spectator redaction, host pause/resume, six-player tables in all eight supported modes, and controlled restart using a local snapshot file. Local-file restart is **not** evidence of a durable Render installation.
+- `python scripts/phase24-browser-acceptance.py`: hosted Chromium scenario with four independently authenticated simulated phone contexts (320, 375, 390 and 412 CSS pixels) plus a widescreen TV context; create/join, public TV display, host pause/resume, deliberate HTTP 503 during refresh, retry saved seat, TV credential revocation, browser script errors and horizontal overflow. Run this in GitHub Actions or an unrestricted local network environment; it cannot replace testing on physical hardware.
+- `/health` returns `storage`, `durableStorage`, `databaseConnected`. Green HTTP 200 on an in-memory server does **not** mean match persistence is safe on restart.
+
+### Physical games-night acceptance checklist — must be signed off by a person
+
+Use the deployed URL on at least one real iPhone (Safari), one Android (Chrome), a desktop browser and a TV browser or connected laptop. Do not share real invite links publicly or take screenshots showing session credentials.
+
+1. **Create and join:** On one phone host Eight Shift for four players, join independently on other devices, and check all four names and distinct hidden hands. Repeat six-player joining for Tile Royale and one contract game.
+2. **Turn privacy:** Confirm each phone only sees its own hand; the television shows public cards, turn and scoring only, with legible text from a normal viewing distance.
+3. **Connectivity:** During a match switch an Android phone between Wi-Fi and mobile data, refresh it, and verify the same seat, cards, turn and scores return. Repeat while the server deliberately responds with HTTP 503 in a controlled environment (do not disrupt a real paid event).
+4. **Host permissions:** Pause/resume on the host, confirm guest moves are prevented while paused, disable the TV link, and ensure the existing television stops receiving updates. Replace the TV link and confirm the previous one fails.
+5. **Access and accessibility:** Test all critical controls with a keyboard, native browser 200% zoom, iOS VoiceOver and Android TalkBack, reduced-motion setting, touch target readability and colour contrast in bright rooms. Record device model, OS/browser version, pass/fail and defects.
+6. **Audio:** Unmute and test the recorded sample, fallback tone, card/tile effects and volume slider on phones and TV speakers, including after switching away and returning to the browser.
+7. **Recovery and hosting:** Confirm the current `/health` shows `durableStorage:false` until PostgreSQL is enabled. If restart survival is required, approve a database plan first, connect `DATABASE_URL` securely, then repeat the restart scenario on a test room (never on someone's active table).
+
+**Release gates:** automated testing and a successful Render deployment are necessary, but **not sufficient**. Hold final multiplayer production sign-off until physical cross-device and accessibility checks pass and the persistence decision is documented. No chargeable PostgreSQL service is created automatically.

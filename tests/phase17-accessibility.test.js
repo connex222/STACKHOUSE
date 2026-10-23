@@ -7,7 +7,7 @@ const offline=readFileSync(new URL('../PLAY-OFFLINE.html',import.meta.url),'utf8
 const ci=readFileSync(new URL('../.github/workflows/accessibility-smoke.yml',import.meta.url),'utf8');
 test('All screens expose a stable, keyboard-focusable main landmark',()=>{
   const screens=main.match(/<main id="main-content" tabindex="-1" class="/g)||[];
-  assert.equal(screens.length,9,'Home, room and all seven game-layout families have a main landmark');
+  assert.equal(screens.length,10,'Home, room, seat recovery and all seven game-layout families have a main landmark');
 });
 test('Skip link is the first keyboard target inside the app',()=>{
   assert.match(main,/app\.innerHTML=`<div class="site-wrap"><a class="skip-link" href="#main-content">Skip to main content<\/a>/);
