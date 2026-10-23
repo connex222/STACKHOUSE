@@ -25,5 +25,5 @@ export function renderMobileActionBar({screen,game,selected,drawerOpen}, {sequen
       '<span class="mobile-action-hint">Select a card</span>';
   }
  }
- return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${drawerOpen}">${drawerOpen?'Close details':'Details & log'}</button></nav>`;
+ return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-rules-button" data-action="rules" aria-label="How to play">Rules</button><button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${drawerOpen}">${drawerOpen?'Close details':'Details & log'}</button></nav>`;
 }

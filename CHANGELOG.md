@@ -9,7 +9,7 @@ This archive preserves earlier release notes. Historical claims are not live pro
 - Added a three-card visible-state planner for Expert Stack Run and Malice Duel. It prefers plays that unlock the stockpile, never peeks at future draw cards or concealed stock cards, and makes no guesses from rival hands.
 - Added an isolated Expert Eight Shift evaluator that considers the bot's own follow-up cards and public discards without inspecting opponents' hidden cards.
 - Extended deterministic regression tests, offline bundling and game-family compatibility tests; updated the source version to v2.6.0.
-- Follow-up acceptance fix: mounted the previously unrendered mobile action bar and repaired the hosted mobile host-control test to open its Details drawer before tapping Pause/Resume/Disable TV.
+- Follow-up acceptance fix: mounted the previously unrendered mobile action bar, added accessible mobile Rules access, and repaired the hosted mobile host-control test to open its Details drawer before tapping Pause/Resume/Disable TV.
 - Not included: disconnected-seat bot takeover, full client view separation, persistent room storage or physical-device certification.
 
 

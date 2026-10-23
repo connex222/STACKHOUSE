@@ -23,6 +23,7 @@ test('Mobile action presenter is isolated from app state and helps keyboard user
  const preview=renderMobileActionBar({screen:'game',game:{kind:'eights',active:0,winner:null,drew:false,roundWinner:null},selected:null,drawerOpen:false},helper);
  assert.match(preview,/data-action="eight-draw"/);
  assert.match(preview,/aria-controls="mobile-table-drawer"/);
+ assert.match(preview,/data-action="rules" aria-label="How to play"/);
  assert.equal(renderMobileActionBar({screen:'home',game:null},helper),'');
 });
 test('Offline builder includes modular UIs and both planners before their consumers',async()=>{
