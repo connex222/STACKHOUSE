@@ -87,7 +87,8 @@ try:
             watch_key=created['watchKey']
             tv.goto(f'{base}/tv.html#room={code}&key={watch_key}',wait_until='domcontentloaded')
             expect(tv.locator('.tv-player')).to_have_count(4,timeout=10000)
-            assert 'PRIVATE TABLE' in host.locator('.game-heading').inner_text()
+            # Mobile layout hides the eyebrow visually: check the DOM text.
+            assert 'PRIVATE TABLE' in host.locator('.game-heading').text_content()
             assert 'Host' in tv.locator('.tv-grid').inner_text()
             assert tv.locator('.hand-piece').count()==0
             assert tv.locator('.tv-footer').inner_text().count('Read-only screen')==1
