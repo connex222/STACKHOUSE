@@ -350,7 +350,8 @@ function resetArrangement(){ui.handOrders={};ui.orderUndo=[];ui.arranging=false;
 
 // Each game has a separate presentation module. The shared context contains view helpers
 // only; server-authoritative game actions and credentials never enter the templates.
-const gameViewContext=()=>({ui,isOnline,gameInfo,gameTop,actionSidebar,playerBadge,
+const gameViewContext=()=>({ui:{game:ui.game,selected:ui.selected,avatarId:ui.avatarId,lowAction:ui.lowAction},
+ isOnline,gameInfo,gameTop,actionSidebar,playerBadge,
  opponentName,opponentImage,asset,escapeHtml,icon,handToolbar,handItems,rematchControl,
  sequencePileTargets,canPassSequenceTurn,canReplenishSequenceHand,MISSION_SETS,
  currentMission,missionDescription,findContract,canLayOffContract,tileMeld,eightCanPlay,SUITS});
