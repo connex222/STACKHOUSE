@@ -1,6 +1,17 @@
 # STACKHOUSE Social — Development archive
 
-This archive preserves the complete README history prior to the independent review implementation. Historical claims are not live production attestations.
+This archive preserves earlier release notes. Historical claims are not live production attestations.
+
+## Phase 25 — Expert planning and browser UI modules (v2.6.0)
+
+- Extracted the original six-family catalogue into `src/ui/game-catalogue.js`; the existing ten game mode IDs and saved-match compatibility remain unchanged.
+- Moved the read-only rule instructions and the mobile action bar to `src/ui/game-instructions.js` and `src/ui/mobile-actions.js`, reducing `src/main.js` by roughly 12 KB while retaining its current orchestration role.
+- Added a three-card visible-state planner for Expert Stack Run and Malice Duel. It prefers plays that unlock the stockpile, never peeks at future draw cards or concealed stock cards, and makes no guesses from rival hands.
+- Added an isolated Expert Eight Shift evaluator that considers the bot's own follow-up cards and public discards without inspecting opponents' hidden cards.
+- Extended deterministic regression tests, offline bundling and game-family compatibility tests; updated the source version to v2.6.0.
+- Not included: disconnected-seat bot takeover, full client view separation, persistent room storage or physical-device certification.
+
+
 
 ---
 

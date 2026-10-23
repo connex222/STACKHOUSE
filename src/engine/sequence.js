@@ -1,3 +1,4 @@
+import {choosePlannedSequenceMove} from './sequence-planner.js';
 import { mulberry32, shuffle } from '../rng.js';
 
 const SETTINGS = Object.freeze({
@@ -165,7 +166,8 @@ export function runSequenceBot(input,difficulty='standard',seat=1,reshuffle=null
     const playable = sequenceSources(state).flatMap(source =>
       sequencePileTargets(state,source.card).map(target => ({ ...source, target })));
     if (!playable.length) break;
-    const selected = (difficulty==='easy'?playable.find(move=>move.type==='hand'&&!move.card.wild):null)
+    const selected = (difficulty==='expert'?choosePlannedSequenceMove(state.builds.map(p=>p.length),sequenceSources(state),3):null)
+      ?? (difficulty==='easy'?playable.find(move=>move.type==='hand'&&!move.card.wild):null)
       ?? playable.find(move => move.type === 'stock')
       ?? playable.find(move => move.type === 'discard')
       ?? playable.find(move => move.type === 'hand' && !move.card.wild)

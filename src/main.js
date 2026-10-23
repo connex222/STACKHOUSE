@@ -1,3 +1,6 @@
+import {renderMobileActionBar} from './ui/mobile-actions.js';
+import {renderRulesMarkup} from './ui/game-instructions.js';
+import {avatars, GROUP_GAME_IDS, games, gameFamilies} from './ui/game-catalogue.js';
 import {createGameAudio} from './audio.js';
 import {botPersona} from './bot-personalities.js';
 import {classifyRoomRecovery} from './room-recovery.js';
@@ -13,33 +16,6 @@ import {createTileGame,tileLay,tileEndTurn,runTileBot,tileMeld} from './engine/t
 import {createLowGame,lowDraw,lowReplace,lowFlip,lowNextRound,runLowBot} from './engine/lowcard.js';
 import {createEightGame,eightCanPlay,eightPlay,eightDraw,eightPass,runEightBot,SUITS} from './engine/eights.js';
 
-const avatars = [
- 'The Host','The Strategist','The Sunshine','The Gentleman','The Rebel','The Captain','The Star','The Professor',
- 'The Drifter','The Ace','The Maverick','The Gamer','The Duchess','The Joker','The Ranger','The Trendsetter'
-].map((name,i)=>({id:i+1,name,image:`/assets/avatar-${String(i+1).padStart(2,'0')}.webp`}));
-const GROUP_GAME_IDS=new Set(['eight-shift','stack-run','malice-duel','tile-royale','phase-quest','contract-club','crown-circuit','shanghai-nights']);
-const games = [
- { id:'stack-run', title:'Stack Run', category:'Sequencing / strategy', kicker:'BUILD. STACK. OUTPLAY.',description:'Climb from 1 to 12 across shared stacks. Your stockpile is the real race.',players:'2–6 players + bot demo', icon:'↗', art:'run',kind:'sequence',tag:'Most like Skip-Bo' },
- { id:'phase-quest', title:'Phase Quest', category:'Contracts / strategy', kicker:'TEN MISSIONS. ONE WINNER.',description:'Complete sets, runs and colour groups. Laying your full contract immediately ends the round.',players:'2–6 players + bot demo',icon:'✦',art:'phase',kind:'contract',tag:'Most like Phase 10' },
- { id:'malice-duel', title:'Malice Duel', category:'Competitive sequencing',kicker:'MAKE EVERY CARD COUNT.',description:'Three shared stacks, a deeper stockpile and just enough room for revenge.',players:'2–6 players + bot demo',icon:'♠',art:'malice',kind:'sequence',tag:'Spite & Malice inspired' },
- { id:'contract-club', title:'Contract Club', category:'Classic rummy contracts', kicker:'READ THE ROOM. MAKE THE MELD.',description:'Lay your contract, extend shared melds and shed every last card to finish the deal.',players:'2–6 players + bot demo',icon:'♣',art:'contract',kind:'contract',tag:'Contract Rummy inspired' },
- { id:'crown-circuit',title:'Crown Circuit',category:'Five-suit wild-card rummy',kicker:'THE WILD RANK NEVER STAYS STILL.',description:'Eleven five-suit contracts with changing wild ranks. Laying first ends each round.',players:'2–6 players + bot demo',icon:'♛',art:'crown',kind:'contract',tag:'Five Crowns-style variant' },
- { id:'number-ladder',title:'Number Ladder',category:'Number ordering / strategy',kicker:'TEN SLOTS. ONE PERFECT ORDER.',description:'Swap one card at a time to build an ascending ladder from 1 to 60.',players:'2 players + bot demo',icon:'↟',art:'ladder',kind:'rack',tag:'Rack-O-style ordering' },
- { id:'shanghai-nights',title:'Shanghai Nights',category:'Progressive contract rummy',kicker:'SEVEN DEALS. SEVEN CHALLENGES.',description:'Seven progressive contracts. Buy a declined discard out of turn, but draw a penalty card.',players:'2–6 players + bot demo',icon:'✴',art:'shanghai',kind:'contract',tag:'Shanghai-style contracts' },
- {id:'tile-royale',title:'Tile Royale',category:'Tile sets and colour runs',kicker:'MAKE YOUR MARK ON THE TABLE.',description:'Lay tile sets and runs. Clear your rack to win, or keep rack points low if the pool runs dry.',players:'2–6 players + bot demo',icon:'▦',art:'tile',kind:'tiles',tag:'Number-tile rummy variant'},
- {id:'low-glow',title:'Low Glow',category:'Memory / low-score cards',kicker:'THE LOWEST SCORE WINS.',description:'Flip, swap and clear matching columns across four fast rounds.',players:'2 players + bot demo',icon:'⬡',art:'low',kind:'low',tag:'Skyjo-style house game'},
- {id:'eight-shift',title:'Eight Shift',category:'Fast card matching',kicker:'MATCH. SWITCH. GET OUT.',description:'Match suits or ranks, and play a wild eight to change the active suit.',players:'2–6 players + bot demo',icon:'8',art:'eight',kind:'eights',tag:'Crazy Eights-style variant'}
-];
-/** Six launcher families retain the ten existing engine-mode IDs. This is deliberate:
- * saved local games, links, private room snapshots and the full rule sets stay valid. */
-const gameFamilies = [
- {id:'stack-run',variants:['stack-run','malice-duel'],title:'Stack Run',description:'Choose Classic or Malice sequencing.'},
- {id:'phase-quest',variants:['phase-quest','contract-club','shanghai-nights','crown-circuit'],title:'Contract',description:'Four distinctive contract rule sets.'},
- {id:'number-ladder',variants:['number-ladder'],title:'Number Ladder'},
- {id:'tile-royale',variants:['tile-royale'],title:'Tile Royale'},
- {id:'low-glow',variants:['low-glow'],title:'Low Glow'},
- {id:'eight-shift',variants:['eight-shift'],title:'Eight Shift'}
-];
 function chosenFamilyMode(family, root=document) {
  const descriptor=gameFamilies.find(item=>item.id===family);
  const chosen=root.getElementById(`family-${family}`)?.value;
@@ -511,14 +487,7 @@ function eightScreen(){const s=ui.game,p=s.players[0],opp=s.players[1],g=gameInf
  <div class="contract-actions"><button class="btn btn-outline" data-action="eight-pass" ${turn&&(s.drew||noDrawPass)?'':'disabled'}>${noDrawPass?'Pass · deck exhausted':'Pass after drawing'} ${icon('arrow',17)}</button></div></div></div>
  ${s.winner!==null?`<div class="game-banner ${s.winner===0?'win':'lose'}"><strong>${s.winner===-1?'HAND POINTS TIED · DRAW':s.winner===0?'YOU WON THE HAND!':`${escapeHtml(s.players[s.winner]?.name??'Another player')} WON THE HAND`}</strong>${isOnline()?rematchControl():'<button class="btn btn-primary" data-action="restart">New match</button>'}</div>`:''}</section>${actionSidebar(side)}</div></main>`;
 }
-function rulesText() {
- const g=gameInfo(),contract=g.kind==='contract';
- return g.kind==='tiles'?`<p>Each player starts with fourteen numbered tiles. Lay matching-number groups of three or four (each colour different) or same-colour consecutive runs of at least three.</p><ol><li>Select tiles in your rack, then lay a valid group onto the table.</li><li>Or select tiles and tap an existing group to extend it without making the group invalid.</li><li>After laying any tiles, end your turn. If you cannot or choose not to lay any, draw one tile instead.</li><li>Empty your rack to win immediately. At five or six players, everyone gets eight turns, then lowest remaining rack points wins. At smaller tables, the points finish happens when the draw pool is empty and everyone is blocked. Wilds cost 20, and exact ties draw.</li></ol><p>At 5–6 players, this is a fixed-eight-turn Points Sprint. Shed high tiles first; a clean rack is an immediate win. House variant: table groups can be extended, not rearranged. Wild tiles act as jokers.</p>`:g.kind==='low'?`<p>Four rounds of card swapping. The player with the lowest accumulated total wins.</p><ol><li>Your 3 × 4 grid starts with two revealed cards.</li><li>Draw from the deck or take the face-up discard.</li><li>Swap your chosen card into any uncleared position. Alternatively, discard a deck draw and reveal one hidden card.</li><li>Three matching face-up values in the same column clear all three cards, scoring zero.</li><li>Once someone reveals their entire grid, the opponent takes one final turn. Hidden cards still score their values.</li><li>Play four rounds; lowest total wins. A tie is possible.</li></ol><p>Original four-round house variation inspired by low-score card games.</p>`:g.kind==='eights'?`<p>Match the top discarded card by suit or rank, or play an eight to declare any suit.</p><ol><li>Play a highlighted legal card from your hand.</li><li>For an eight, choose the suit that must be followed next.</li><li>If you do not play, draw one card. You may play after drawing, or pass.</li><li>The first player to empty their hand wins. If the deck is completely blocked, players may pass and the lowest hand points win (or tie).</li></ol><p>Original simplified card-matching variant using a standard deck.</p>`:g.kind==='rack'?`<p>Build an ascending rack of ten cards from 1 to 60. Every card must be higher than the one before it.</p><ol><li>Draw the top card from the face-down deck or face-up discard pile.</li><li>Replace any one of your ten slots, or discard the card you picked up.</li><li>The replaced card becomes the new discard.</li><li>First player with all ten cards in strict ascending order wins.</li></ol><p>The other player's rack is always hidden. This is an original number-ordering variant.</p>`:contract?`<p>Take turns drawing one card from the deck or the face-up discard pile. Your goal is to collect the entire combination shown in the Current Contract panel.</p>
- <ol><li>Draw one card.</li><li>If your hand contains the full contract, choose <strong>Lay my contract</strong>. In Contract Club, continue laying off cards on any shared meld to empty your hand.</li><li>Otherwise select a card from your hand and choose <strong>Discard selected card</strong>.</li><li>In Contract Club, the first player to empty their hand ends the deal, and everyone who laid a contract advances. In other games, the first player to lay a complete contract wins that round and advances to their next mission. Every other player stays on their current mission and receives penalty points for the cards in their own hand.</li><li>In a Full Match, finish all ${MISSION_SETS[ui.mode].length} contracts to win. In a Quick Match, play two deals per player; most completed contracts wins, with fewest penalty points breaking ties.</li></ol>
- <p>${ui.mode==='contract-club'?'In Contract Club, laying your contract opens the shared melds: you may then add matching cards to any player’s laid sets or runs. A deal ends when somebody empties their hand, or after ten turns per player; lowest unplayed-hand points wins at closing time (exact ties draw). Everybody who laid advances, and remaining cards score penalty points.':ui.mode==='crown-circuit'?'Crown Circuit has five suits, ranks 3–13, and a wild rank that changes with each new round. Face cards (11–13) cost 15 penalty points; wilds cost 25. This is an original contract-based variant, not the exact Five Crowns rules.':ui.mode==='shanghai-nights'?'Shanghai Nights lets waiting players buy a discard declined by the active player who drew from the deck. The buyer also takes one face-down penalty card and may buy once per deal.':''}</p><p>Wild cards can substitute for any number or colour. For a run, numbers must be consecutive, with no duplicate fixed numbers. Penalty scores determine tied positions in Quick Matches; Full Matches are won by completing every contract.</p>`
- :`<p>Race your opponent to clear your personal stockpile. Build shared centre stacks upwards from 1 to 12. A wild card substitutes for whatever number is needed next.</p>
- <ol><li>Select the face-up card from your <strong>stockpile</strong>, hand, or one of your four discard stacks.</li><li>Choose a highlighted shared building stack to play that card. Each stack begins at 1, goes to 12, then clears.</li><li>You may keep playing while you have legal moves. If your hand becomes empty it automatically refills to five.</li><li>To finish your turn, select a card from your hand, then choose a personal discard stack.</li><li>The first player to empty their stockpile wins. If you have no hand cards, no available deck cards and no legal stock or discard play, use Pass.</li><li>If everybody is forced to pass consecutively, the player with the fewest stockpile cards wins. Equal lowest counts make the match a draw.</li></ol><p>Only the top card of a personal discard stack can be played. Always prioritise your stockpile — those are the cards that count towards victory.</p>`;
-}
+function rulesText(){return renderRulesMarkup(gameInfo(),ui.mode,MISSION_SETS);}
 function modalContent() {
  if(!ui.modal)return '';
  const avatarModal=ui.modal==='avatars';
@@ -591,32 +560,7 @@ function announceStatus(){
  if(message!==previousAnnouncement){status.textContent=message;previousAnnouncement=message;}
 }
 function mobileActionBar(){
- if(ui.screen!=='game'||!ui.game)return '';
- const state=ui.game,canMove=state.active===0&&state.winner===null&&state.roundWinner==null;
- let button='<span class="mobile-action-hint">Tap a card to play</span>';
- if(canMove){
-  if(state.kind==='eights')button=state.drew?'<button data-action="eight-pass">Pass turn</button>':'<button data-action="eight-draw">Draw a card</button>';
-  else if(state.kind==='contract')button=state.step==='draw'?'<button data-action="contract-draw" data-from="deck">Draw a card</button>':
-    ui.selected?.type==='contract-hand'?'<button data-action="contract-discard">Discard selected</button>':'<span class="mobile-action-hint">Lay or discard a card</span>';
-  else if(state.kind==='rack')button=state.step==='draw'?'<button data-action="rack-draw" data-from="deck">Draw a card</button>':
-    '<button data-action="rack-discard">Discard drawn card</button>';
-  else if(state.kind==='low')button=state.step==='draw'?'<button data-action="low-draw" data-from="deck">Draw a card</button>':
-    '<span class="mobile-action-hint">Choose a grid position</span>';
-  else if(state.kind==='tiles')button=ui.selected?.type==='tiles'&&ui.selected.indices.length>=3?
-    '<button data-action="tile-lay">Lay selected tiles</button>':
-    `<button data-action="tile-end" data-draw="${!state.playedThisTurn&&state.draw.length>0}">${state.playedThisTurn?'End turn':'Draw / end turn'}</button>`;
-  else if(state.kind==='sequence'){
-    const source=ui.selected?.type==='stock'?state.players[0].stock.at(-1):
-      ui.selected?.type==='hand'?state.players[0].hand[ui.selected.index]:
-      ui.selected?.type==='discard'?state.players[0].discards[ui.selected.index]?.at(-1):null;
-    const targets=source?sequencePileTargets(state,source):[];
-    button=targets.length?`<button data-action="build" data-index="${targets[0]}">Play on stack ${targets[0]+1}</button>`:
-      state.canRefill||canReplenishSequenceHand(state)?'<button data-action="seq-refill">Refill hand</button>':
-      state.canPass||canPassSequenceTurn(state)?'<button data-action="seq-pass">Pass turn</button>':
-      '<span class="mobile-action-hint">Select a card</span>';
-  }
- }
- return `<nav class="mobile-action-bar" aria-label="Game actions">${button}<button class="mobile-details-button" data-action="toggle-table-drawer" aria-controls="mobile-table-drawer" aria-expanded="${ui.drawerOpen}">${ui.drawerOpen?'Close details':'Details & log'}</button></nav>`;
+ return renderMobileActionBar(ui,{sequencePileTargets,canReplenishSequenceHand,canPassSequenceTurn});
 }
 function render(){
  const currentFocus=focusLocator(document.activeElement);

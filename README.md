@@ -8,7 +8,7 @@ Choose from six game families: **Stack Run** (Classic/Malice), **Contract** (Pha
 
 **Games Night Mix:** Host a 2–6 player private table, select the games and choose 3, 5, 7 or 9 rounds. A running points table records each winner and names a House Champion. The TV link is spectator-only and excludes hidden cards. For three or more players, choose only group-compatible games.
 
-**Solo:** Choose 1–5 House Bots for supported group games. Each bot has an avatar and play-style preference. Number Ladder and Low Glow remain one human versus one bot.
+**Solo:** Choose 1–5 House Bots for supported group games. Each bot has an avatar and play-style preference. Expert sequencing opponents use bounded, visible-card lookahead to find plays that unblock their stockpile; Expert Eight Shift evaluates future playable cards using its own hand and face-up discards. Neither algorithm peeks at opponents' private card values or the draw pile. Difficulty and enjoyment still require human playtesting. Number Ladder and Low Glow remain one human versus one bot.
 
 ## Run the source
 
@@ -35,6 +35,8 @@ On one iPhone (Safari) and one Android handset (Chrome): join the same room; ver
 
 ## Project organisation
 
-`server.js` starts the HTTP/SSE service; `src/server/rooms.js` authenticates seats, enforces revisions and persists room state; `src/server/game-modules.js` adapts the six game engines to a common interface; `src/server/projections.js` redacts private hands; `src/engine/` contains pure rules; `src/main.js` is the current browser interface; `src/tv.js` is the TV spectator view. See [MODULE-GUIDE.md](MODULE-GUIDE.md) for adding a game and [CHANGELOG.md](CHANGELOG.md) for the preserved phase history.
+`server.js` starts the HTTP/SSE service; `src/server/rooms.js` authenticates seats, enforces revisions and persists room state; `src/server/game-modules.js` adapts the six game engines to a common interface; `src/server/projections.js` redacts private hands; `src/engine/` contains pure rules; `src/main.js` orchestrates the browser interface; `src/ui/` contains the family catalogue, instructions and mobile action bar; `src/engine/sequence-planner.js` and `src/engine/eight-planner.js` hold bounded bot strategies; `src/tv.js` is the TV spectator view. See [MODULE-GUIDE.md](MODULE-GUIDE.md) for adding a game and [CHANGELOG.md](CHANGELOG.md) for the preserved phase history.
+
+**Phase 25 status:** Version 2.6.0 extracts three reusable client views and adds visible-information planning to two Expert bot families. Other bots still use the existing heuristics. Full per-game view separation, bot takeover of disconnected seats, physical-device acceptance and permanent hosting storage are *not* included in this phase.
 
 **Boundaries:** The six-family launcher is a presentation change, not a destructive rewrite of ten game rule sets. Bot strength and real-phone comfort still need human playtesting. The offline edition uses local system fonts and makes no font-network requests.

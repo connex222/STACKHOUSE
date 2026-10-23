@@ -1,3 +1,4 @@
+import {chooseExpertEightMove} from './eight-planner.js';
 import {mulberry32,shuffle} from '../rng.js';
 const clone=structuredClone;
 export const SUITS=['hearts','diamonds','clubs','spades'];
@@ -29,6 +30,7 @@ export function chooseEightBotMove(state,difficulty='standard',seat=1){
  const choices=hand.map((card,i)=>({card,i})).filter(x=>eightCanPlay(x.card,state));
  if(!choices.length)return null;
  if(difficulty==='easy'){const first=choices[0];return {...first,suit:first.card.value===8?'hearts':null};}
+ if(difficulty==='expert')return chooseExpertEightMove(hand,choices,state.discard,[]);
  const natural=choices.filter(x=>x.card.value!==8);
  const pool=natural.length?natural:choices;
  if(difficulty==='expert'&&hand.length===1){const last=choices[0];return {...last,suit:last.card.value===8?'hearts':null};}
